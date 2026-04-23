@@ -43,6 +43,15 @@ html, body, .stApp {
     font-family: 'DM Sans', 'Noto Sans KR', sans-serif !important;
 }
 
+/* ── 좌우 여백 ── */
+.block-container {
+    max-width: 960px !important;
+    padding-left: 6rem !important;
+    padding-right: 6rem !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+}
+
 /* Grain overlay */
 .stApp::before {
     content: '';
@@ -676,11 +685,12 @@ st.markdown("""
 <div class="masthead-thin"></div>
 """, unsafe_allow_html=True)
 
-# ── Section 1: API ──
-with st.expander("⚙  API KEY 설정", expanded=False):
-    api_key = st.text_input("Anthropic API Key", type="password",
-                             placeholder="sk-ant-api03-...",
-                             help="console.anthropic.com에서 발급")
+# ── API Key: Streamlit Secrets에서 자동 로드 ──
+try:
+    api_key = st.secrets["ANTHROPIC_API_KEY"]
+except Exception:
+    st.error("⚠️ 서버 설정 오류입니다. 관리자에게 문의해주세요.")
+    st.stop()
 
 # ── Section 2: Candidate Info ──
 st.markdown("""
@@ -756,9 +766,7 @@ st.markdown('<div class="hr"></div>', unsafe_allow_html=True)
 run = st.button("◈  분석 시작", use_container_width=True)
 
 if run:
-    if not api_key:
-        st.error("API Key를 먼저 입력해주세요.")
-    elif not file_data and not candidate_name:
+    if not file_data and not candidate_name:
         st.error("자료를 최소 1개 이상 업로드하거나 성명을 입력해주세요.")
     else:
         with st.spinner("분석 중 — 업로드된 자료를 종합 검토하고 있습니다..."):
