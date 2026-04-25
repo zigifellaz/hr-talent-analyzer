@@ -687,101 +687,81 @@ def analyze_candidate(api_key, file_data, candidate_name, company_standard):
 
 반드시 아래 JSON 형식으로만 응답하세요. JSON 외 어떤 텍스트도 출력하지 마세요:
 {
-  "candidate_summary": "대상자 핵심 특성을 컨설팅 언어로 표현한 한줄 평가 (70자 내외, 구체적 강점과 포지셔닝 포함)",
-  "personality_tags": ["핵심역량태그1","핵심역량태그2","성향태그3","리스크태그4","포지셔닝태그5"],
+  "candidate_summary": "대상자 핵심 특성 한줄 평가 (50자 이내)",
+  "personality_tags": ["태그1","태그2","태그3","태그4","태그5"],
   "dimensions": {
     "cognitive_ability": {
       "score": 75,
       "grade": "B+",
-      "summary": "4-5문장의 전문 컨설팅 수준 분석. 강점의 구체적 발현 방식, 내재된 인지 패턴, 조직 내 활용 가능성, 잠재적 한계까지 포함",
-      "evidence": ["자료에서 직접 확인된 구체적 행동 근거 1", "수치나 사례가 포함된 근거 2", "복수 자료 교차 확인된 근거 3"]
+      "summary": "3문장 분석. 강점 발현 방식·조직 활용 가능성·잠재 한계 포함",
+      "evidence": ["근거1","근거2"]
     },
     "job_expertise": {
       "score": 80,
       "grade": "A",
-      "summary": "4-5문장의 전문 컨설팅 수준 분석",
-      "evidence": ["근거1", "근거2", "근거3"]
+      "summary": "3문장 분석",
+      "evidence": ["근거1","근거2"]
     },
     "proactiveness": {
       "score": 70,
       "grade": "B",
-      "summary": "4-5문장의 전문 컨설팅 수준 분석",
-      "evidence": ["근거1", "근거2", "근거3"]
+      "summary": "3문장 분석",
+      "evidence": ["근거1","근거2"]
     },
     "leadership": {
       "score": 65,
       "grade": "B-",
-      "summary": "4-5문장의 전문 컨설팅 수준 분석",
-      "evidence": ["근거1", "근거2", "근거3"]
+      "summary": "3문장 분석",
+      "evidence": ["근거1","근거2"]
     }
   },
   "burnout_risk": {
     "level": "MEDIUM",
     "score": 45,
-    "emotional_exhaustion": "정서적 고갈 축 평가 (2-3문장, 자료 기반 근거 포함)",
-    "depersonalization": "비인격화 축 평가 (2-3문장, 자료 기반 근거 포함)",
-    "personal_accomplishment": "개인 성취감 축 평가 (2-3문장, 자료 기반 근거 포함)",
-    "summary": "3가지 축을 종합한 번아웃 위험도 총평 및 조직 관리 권고 (3-4문장)",
-    "evidence": ["근거1", "근거2", "근거3"]
+    "emotional_exhaustion": "2문장",
+    "depersonalization": "2문장",
+    "personal_accomplishment": "2문장",
+    "summary": "2문장 총평 및 관리 권고",
+    "evidence": ["근거1","근거2"]
   },
   "turnover_risk": {
     "level": "LOW",
     "score": 25,
-    "push_factors": "현 조직 이탈 요인 분석 (2-3문장, 자료 기반 근거 포함)",
-    "pull_factors": "외부 유인 요인 분석 (2-3문장, 자료 기반 근거 포함)",
-    "retention_signals": "재직 의향 긍정 신호 분석 (2-3문장)",
-    "summary": "Push-Pull 종합 이직 가능성 총평 및 리텐션 전략 권고 (3-4문장)",
-    "evidence": ["근거1", "근거2", "근거3"]
+    "push_factors": "2문장",
+    "pull_factors": "2문장",
+    "retention_signals": "2문장",
+    "summary": "2문장 총평 및 리텐션 전략",
+    "evidence": ["근거1","근거2"]
   },
   "hiring_keywords": [
     {
       "rank": 1,
-      "keyword": "10자 이내 핵심 역량 키워드",
-      "why": "이 키워드가 1순위인 이유를 회사 인재상·직무 요건과 연결하여 3-4문장으로 설명. 해당 인재 유형의 본질적 특성과 연결",
-      "how_to_check": "면접관이 실제로 사용할 수 있는 구체적 질문 2가지와 평가 포인트 포함. 행동사건 면접법(STAR: Situation-Task-Action-Result) 기반으로 작성"
+      "keyword": "10자 이내 키워드",
+      "why": "2문장 선정 이유 (인재상 연결)",
+      "how_to_check": "STAR 기반 질문 1개 + 평가 포인트"
     },
     {
       "rank": 2,
-      "keyword": "10자 이내 핵심 역량 키워드",
-      "why": "3-4문장 설명",
-      "how_to_check": "구체적 질문과 평가 포인트"
+      "keyword": "10자 이내 키워드",
+      "why": "2문장",
+      "how_to_check": "STAR 기반 질문 1개 + 평가 포인트"
     },
     {
       "rank": 3,
-      "keyword": "10자 이내 핵심 역량 키워드",
-      "why": "3-4문장 설명",
-      "how_to_check": "구체적 질문과 평가 포인트"
+      "keyword": "10자 이내 키워드",
+      "why": "2문장",
+      "how_to_check": "STAR 기반 질문 1개 + 평가 포인트"
     }
   ],
-  "derailer": "이 인재 유형의 잠재적 위험 요소(Derailer) — 스트레스 상황이나 장기 재직 시 나타날 수 있는 부정적 행동 패턴과 조직 내 주의사항을 2-3문장으로 기술",
-  "development_suggestion": "이 인재가 조직에서 최고 성과를 내기 위해 필요한 환경 조건·관리 방식·개발 과제를 2-3문장으로 제시",
-  "overall_insight": "McKinsey, Korn Ferry 수준의 임원 평가 리포트 언어로 작성한 종합 인사이트. 대상자의 인재 유형 명명, 조직 내 최적 포지셔닝, 단기·중장기 기여 가능성, 채용 의사결정을 위한 최종 권고를 5-6문장으로 기술",
+  "derailer": "2문장. 스트레스·장기 재직 시 부정적 행동 패턴",
+  "development_suggestion": "2문장. 최고 성과를 위한 환경·관리 방식",
+  "overall_insight": "4문장. 인재 유형 명명·최적 포지셔닝·채용 최종 권고",
   "key_highlights": [
-    {
-      "category": "강점",
-      "text": "검토자가 반드시 주목해야 할 핵심 강점 문장 (실제 분석 내용에서 추출, 원문 그대로)",
-      "source": "출처 섹션명 (예: 잡 전문성, 종합 인사이트 등)"
-    },
-    {
-      "category": "강점",
-      "text": "두 번째 주목 문장",
-      "source": "출처 섹션명"
-    },
-    {
-      "category": "리스크",
-      "text": "리스크 관련 주목 문장 (Derailer, 번아웃, 이직 중 가장 중요한 것)",
-      "source": "출처 섹션명"
-    },
-    {
-      "category": "채용판단",
-      "text": "채용 의사결정에 직접 영향을 주는 핵심 판단 문장",
-      "source": "출처 섹션명"
-    },
-    {
-      "category": "관리포인트",
-      "text": "입사 후 관리자가 반드시 알아야 할 핵심 문장",
-      "source": "출처 섹션명"
-    }
+    {"category": "강점",      "text": "분석 내용에서 추출한 핵심 강점 문장 (원문 그대로)", "source": "출처 섹션"},
+    {"category": "강점",      "text": "두 번째 강점 문장", "source": "출처 섹션"},
+    {"category": "리스크",    "text": "가장 중요한 리스크 문장", "source": "출처 섹션"},
+    {"category": "채용판단",  "text": "채용 의사결정 핵심 문장", "source": "출처 섹션"},
+    {"category": "관리포인트","text": "입사 후 관리자 핵심 참고 문장", "source": "출처 섹션"}
   ]
 }"""
 
@@ -799,11 +779,29 @@ def analyze_candidate(api_key, file_data, candidate_name, company_standard):
     raw = response.content[0].text.strip()
     raw = re.sub(r"^```(?:json)?\s*", "", raw)
     raw = re.sub(r"\s*```$", "", raw)
-    # JSON 블록만 추출 (앞뒤 여분 텍스트 제거)
+    # JSON 블록만 추출
     match = re.search(r'\{[\s\S]+\}', raw)
     if match:
         raw = match.group(0)
-    return json.loads(raw)
+    # 잘린 JSON 자동 복구: 마지막 완성된 키까지만 살려서 닫기
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        # 마지막 완전한 key-value 쌍 이후를 제거하고 닫기 시도
+        repaired = raw
+        for closing in ['"}', '"]', '}']:
+            last = repaired.rfind(closing)
+            if last != -1:
+                candidate = repaired[:last + len(closing)]
+                # 열린 괄호 수에 맞춰 닫기
+                opens  = candidate.count('{') - candidate.count('}')
+                opens2 = candidate.count('[') - candidate.count(']')
+                candidate += ']' * max(0, opens2) + '}' * max(0, opens)
+                try:
+                    return json.loads(candidate)
+                except Exception:
+                    continue
+        raise
 
 
 def grade_color(grade):
