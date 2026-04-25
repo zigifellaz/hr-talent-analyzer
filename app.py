@@ -755,7 +755,34 @@ def analyze_candidate(api_key, file_data, candidate_name, company_standard):
   ],
   "derailer": "이 인재 유형의 잠재적 위험 요소(Derailer) — 스트레스 상황이나 장기 재직 시 나타날 수 있는 부정적 행동 패턴과 조직 내 주의사항을 2-3문장으로 기술",
   "development_suggestion": "이 인재가 조직에서 최고 성과를 내기 위해 필요한 환경 조건·관리 방식·개발 과제를 2-3문장으로 제시",
-  "overall_insight": "McKinsey, Korn Ferry 수준의 임원 평가 리포트 언어로 작성한 종합 인사이트. 대상자의 인재 유형 명명, 조직 내 최적 포지셔닝, 단기·중장기 기여 가능성, 채용 의사결정을 위한 최종 권고를 5-6문장으로 기술"
+  "overall_insight": "McKinsey, Korn Ferry 수준의 임원 평가 리포트 언어로 작성한 종합 인사이트. 대상자의 인재 유형 명명, 조직 내 최적 포지셔닝, 단기·중장기 기여 가능성, 채용 의사결정을 위한 최종 권고를 5-6문장으로 기술",
+  "key_highlights": [
+    {
+      "category": "강점",
+      "text": "검토자가 반드시 주목해야 할 핵심 강점 문장 (실제 분석 내용에서 추출, 원문 그대로)",
+      "source": "출처 섹션명 (예: 잡 전문성, 종합 인사이트 등)"
+    },
+    {
+      "category": "강점",
+      "text": "두 번째 주목 문장",
+      "source": "출처 섹션명"
+    },
+    {
+      "category": "리스크",
+      "text": "리스크 관련 주목 문장 (Derailer, 번아웃, 이직 중 가장 중요한 것)",
+      "source": "출처 섹션명"
+    },
+    {
+      "category": "채용판단",
+      "text": "채용 의사결정에 직접 영향을 주는 핵심 판단 문장",
+      "source": "출처 섹션명"
+    },
+    {
+      "category": "관리포인트",
+      "text": "입사 후 관리자가 반드시 알아야 할 핵심 문장",
+      "source": "출처 섹션명"
+    }
+  ]
 }"""
 
     user_content = build_user_content(file_data, candidate_name, company_standard)
@@ -837,6 +864,49 @@ def render_result(R: dict, candidate_name: str):
         <div>{tags_html}</div>
     </div>
     """, unsafe_allow_html=True)
+
+    # ── 형광팬 하이라이트 ──
+    highlights = R.get("key_highlights", [])
+    if highlights:
+        cat_style = {
+            "강점":     ("🟡", "#FFFBCC", "#7A6800", "#F5E500"),
+            "리스크":   ("🔴", "#FFE8E8", "#7A0000", "#FF8080"),
+            "채용판단": ("🟢", "#E8F5E9", "#1A5C1A", "#4CAF50"),
+            "관리포인트":("🔵", "#E8F0FF", "#1A2E7A", "#5C80FF"),
+        }
+        st.markdown("""
+        <div class="section-header">
+            <span class="section-num">✦</span>
+            <span class="section-title">검토자 주목 포인트</span>
+            <div class="section-rule"></div>
+        </div>
+        <p style="font-size:0.72rem;color:#B0A898;margin:-0.3rem 0 1rem 0;">
+            AI가 전체 분석에서 검토자가 반드시 확인해야 할 핵심 문장을 선별했습니다.
+        </p>
+        """, unsafe_allow_html=True)
+
+        for h in highlights:
+            cat  = h.get("category", "강점")
+            text = h.get("text", "")
+            src  = h.get("source", "")
+            icon, bg, tc, bar = cat_style.get(cat, ("◈","#FFFBCC","#7A6800","#F5E500"))
+            st.markdown(f"""
+            <div style="background:{bg};border-left:4px solid {bar};border-radius:0 6px 6px 0;
+                        padding:0.9rem 1.2rem;margin-bottom:0.6rem;position:relative;">
+                <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem;">
+                    <span style="font-size:0.65rem;font-weight:700;letter-spacing:2px;
+                                text-transform:uppercase;color:{tc};">{icon} {cat}</span>
+                    <span style="font-size:0.62rem;color:{tc};opacity:0.7;">· {src}</span>
+                </div>
+                <div style="font-size:0.88rem;color:{tc};line-height:1.75;font-weight:500;
+                            background:rgba(255,255,255,0.55);border-radius:4px;
+                            padding:0.5rem 0.8rem;">
+                    {text}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown('<div style="height:1rem;"></div>', unsafe_allow_html=True)
 
     # ── 역량 차원 ──
     st.markdown("""
