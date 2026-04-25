@@ -5,13 +5,14 @@ import io
 import json
 import re
 from pathlib import Path
+from datetime import datetime
 
 # ─── Page Config ────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="Talent Intelligence · M.I.Tech",
     page_icon="◈",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
 # ─── Custom CSS — Editorial Luxury ──────────────────────────────────────────
@@ -755,6 +756,243 @@ def dim_icon(k):
             "proactiveness":"🔥","leadership":"👑"}.get(k,"◈")
 
 
+# ─── 아카이브 함수 ────────────────────────────────────────────────────────────
+ARCHIVE_FILE = "archive.json"
+
+def load_archive() -> list:
+    try:
+        if Path(ARCHIVE_FILE).exists():
+            with open(ARCHIVE_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return []
+
+def save_to_archive(record: dict):
+    archive = load_archive()
+    archive.insert(0, record)   # 최신순
+    with open(ARCHIVE_FILE, "w", encoding="utf-8") as f:
+        json.dump(archive, f, ensure_ascii=False, indent=2)
+
+def delete_from_archive(idx: int):
+    archive = load_archive()
+    if 0 <= idx < len(archive):
+        archive.pop(idx)
+    with open(ARCHIVE_FILE, "w", encoding="utf-8") as f:
+        json.dump(archive, f, ensure_ascii=False, indent=2)
+
+
+# ─── 결과 렌더링 함수 (신규 분석 & 아카이브 조회 공용) ──────────────────────
+def render_result(R: dict, candidate_name: str):
+    name_d = candidate_name or "대상자"
+    tags_html = "".join(
+        f'<span class="tag-chip">{t}</span>'
+        for t in R.get("personality_tags", [])
+    )
+    st.markdown(f"""
+    <div class="report-cover">
+        <div class="report-cover-label">◈ Talent Analysis Report</div>
+        <div class="report-cover-name">{name_d}</div>
+        <div class="report-cover-summary">{R.get('candidate_summary','')}</div>
+        <div>{tags_html}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── 역량 차원 ──
+    st.markdown("""
+    <div class="section-header">
+        <span class="section-num">04</span>
+        <span class="section-title">역량 차원 분석</span>
+        <div class="section-rule"></div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    dims = R.get("dimensions", {})
+    d_col1, d_col2 = st.columns(2)
+    for idx, (key, info) in enumerate(dims.items()):
+        score  = info.get("score", 0)
+        grade  = info.get("grade", "-")
+        gcolor = grade_color(grade)
+        ev_html = "".join(
+            f'<div class="evidence-item"><div class="evidence-dot"></div><span>{e}</span></div>'
+            for e in info.get("evidence", [])
+        )
+        with (d_col1 if idx % 2 == 0 else d_col2):
+            st.markdown(f"""
+            <div class="dim-card">
+                <div class="dim-header">
+                    <div class="dim-icon-title">
+                        <div class="dim-icon">{dim_icon(key)}</div>
+                        <div>
+                            <div class="dim-name">{dim_label(key)}</div>
+                            <div class="dim-sub">{dim_sublabel(key)}</div>
+                        </div>
+                    </div>
+                    <div class="dim-score-block">
+                        <div class="dim-score">{score}<span>/100</span></div>
+                        <div class="dim-grade" style="color:{gcolor};">{grade}</div>
+                    </div>
+                </div>
+                <div class="progress-track">
+                    <div class="progress-fill" style="width:{score}%;"></div>
+                </div>
+                <div class="dim-summary">{info.get('summary','')}</div>
+                <div class="evidence-list">{ev_html}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    # ── 채용 키워드 ──
+    st.markdown("""
+    <div class="section-header" style="margin-top:2.5rem;">
+        <span class="section-num">05</span>
+        <span class="section-title">채용 핵심 키워드 Top 3</span>
+        <div class="section-rule"></div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    rank_cls = ["rank-gold","rank-silver","rank-bronze"]
+    rank_lbl = ["1st","2nd","3rd"]
+    for kw in R.get("hiring_keywords", []):
+        r  = kw.get("rank", 1) - 1
+        rc = rank_cls[r] if r < 3 else "rank-bronze"
+        rl = rank_lbl[r] if r < 3 else f"{r+1}th"
+        st.markdown(f"""
+        <div class="kw-card">
+            <div class="kw-rank-col">
+                <div class="kw-rank-num {rc}">{r+1}</div>
+                <span class="kw-rank-label">{rl}</span>
+            </div>
+            <div>
+                <div class="kw-title">{kw.get('keyword','')}</div>
+                <div class="kw-why">{kw.get('why','')}</div>
+                <div class="kw-how">
+                    <div class="kw-how-label">확인 방법</div>
+                    <div class="kw-how-text">{kw.get('how_to_check','')}</div>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # ── Derailer & Development ──
+    st.markdown("""
+    <div class="section-header" style="margin-top:2.5rem;">
+        <span class="section-num">06</span>
+        <span class="section-title">리스크 & 개발 제언</span>
+        <div class="section-rule"></div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    dd1, dd2 = st.columns(2)
+    with dd1:
+        st.markdown(f"""
+        <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;
+                    padding:1.4rem 1.6rem;border-left:3px solid #8B2635;">
+            <div style="font-size:0.65rem;font-weight:700;letter-spacing:3px;
+                        text-transform:uppercase;color:#8B2635;margin-bottom:0.8rem;">
+                ⚠ Derailer · 잠재적 위험 요인
+            </div>
+            <div style="font-size:0.85rem;color:#3D3830;line-height:1.85;">
+                {R.get('derailer','자료 부족으로 분석 불가')}
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    with dd2:
+        st.markdown(f"""
+        <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;
+                    padding:1.4rem 1.6rem;border-left:3px solid #2D6A4F;">
+            <div style="font-size:0.65rem;font-weight:700;letter-spacing:3px;
+                        text-transform:uppercase;color:#2D6A4F;margin-bottom:0.8rem;">
+                ◆ Development · 성과 극대화 조건
+            </div>
+            <div style="font-size:0.85rem;color:#3D3830;line-height:1.85;">
+                {R.get('development_suggestion','자료 부족으로 분석 불가')}
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # ── Overall Insight ──
+    st.markdown("""
+    <div class="section-header" style="margin-top:2.5rem;">
+        <span class="section-num">07</span>
+        <span class="section-title">종합 인사이트 & 채용 권고</span>
+        <div class="section-rule"></div>
+    </div>
+    """, unsafe_allow_html=True)
+    st.markdown(f"""
+    <div class="insight-box">
+        <div class="insight-label">◈ Executive Assessment Summary</div>
+        <div class="insight-text">{R.get('overall_insight','')}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("""
+    <div style="text-align:center;padding:2.5rem 0 1rem;font-size:0.65rem;
+         letter-spacing:3px;text-transform:uppercase;color:#B0A898;">
+        Assessment Complete &nbsp;·&nbsp; M.I.Tech Talent Intelligence &nbsp;·&nbsp; Confidential
+    </div>
+    """, unsafe_allow_html=True)
+
+
+# ─── 사이드바 아카이브 ──────────────────────────────────────────────────────
+with st.sidebar:
+    st.markdown("""
+    <div style="padding:0.5rem 0 1rem;">
+        <div style="font-family:'DM Serif Display',serif;font-size:1.2rem;
+                    color:#1A1714;font-style:italic;margin-bottom:0.3rem;">
+            Archive
+        </div>
+        <div style="font-size:0.65rem;letter-spacing:2px;text-transform:uppercase;
+                    color:#B0A898;">분석 기록 조회</div>
+        <div style="height:1px;background:#D4CEC4;margin-top:0.8rem;"></div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    archive = load_archive()
+
+    if not archive:
+        st.markdown('<p style="font-size:0.8rem;color:#B0A898;text-align:center;padding:2rem 0;">저장된 분석 기록이 없습니다.</p>', unsafe_allow_html=True)
+    else:
+        # 전체 내보내기
+        export_json = json.dumps(archive, ensure_ascii=False, indent=2)
+        st.download_button(
+            label="⬇ 전체 기록 내보내기 (JSON)",
+            data=export_json.encode("utf-8"),
+            file_name=f"talent_archive_{datetime.now().strftime('%Y%m%d')}.json",
+            mime="application/json",
+            use_container_width=True
+        )
+        st.markdown('<div style="height:0.5rem;"></div>', unsafe_allow_html=True)
+
+        for i, rec in enumerate(archive):
+            name    = rec.get("candidate_name", "이름 없음")
+            dept    = rec.get("dept", "")
+            saved   = rec.get("saved_at", "")
+            summary = rec.get("result", {}).get("candidate_summary", "")[:40]
+            tags    = rec.get("result", {}).get("personality_tags", [])[:2]
+
+            # 카드 클릭 = 해당 기록 조회
+            with st.expander(f"**{name}** · {saved[:10]}", expanded=False):
+                if dept:
+                    st.caption(dept)
+                st.markdown(f'<p style="font-size:0.75rem;color:#7A7268;line-height:1.6;">{summary}...</p>',
+                            unsafe_allow_html=True)
+                for t in tags:
+                    st.markdown(f'<span style="display:inline-block;border:1px solid #D4AF72;color:#B8924A;'
+                                f'border-radius:3px;padding:1px 7px;font-size:0.68rem;margin:1px;">{t}</span>',
+                                unsafe_allow_html=True)
+                col_v, col_d = st.columns(2)
+                with col_v:
+                    if st.button("조회", key=f"view_{i}", use_container_width=True):
+                        st.session_state["archive_view"] = i
+                        st.session_state["show_archive"] = True
+                        st.rerun()
+                with col_d:
+                    if st.button("삭제", key=f"del_{i}", use_container_width=True):
+                        delete_from_archive(i)
+                        if st.session_state.get("archive_view") == i:
+                            st.session_state["show_archive"] = False
+                        st.rerun()
+
 # ─── UI ─────────────────────────────────────────────────────────────────────
 
 # Masthead
@@ -857,229 +1095,83 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-st.markdown("""
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1rem;">
+guide_items = [
+    ("#B8924A", "01 · 대상자 프로필",       "종합 한줄 평가와 함께 대상자의 핵심 성향을 태그로 요약해드립니다."),
+    ("#2B3D5C", "02 · 4개 역량 차원 분석",  "인지능력 · 잡 전문성 · 적극성 · 리더십을 100점 만점으로 점수화하고 근거를 제시합니다."),
+    ("#B8924A", "03 · 채용 키워드 TOP 3",   "STAR 행동사건 면접법 기반의 구체적 질문과 평가 포인트를 순위별로 제공합니다."),
+    ("#8B2635", "04 · Derailer 위험 요인",  "Hogan Assessment 기반으로 스트레스 상황에서 나타날 수 있는 부정적 행동 패턴을 사전 식별합니다."),
+    ("#2D6A4F", "05 · 성과 극대화 조건",    "이 인재가 최고 성과를 낼 수 있는 환경·관리 방식·개발 과제를 제시합니다."),
+    ("#2B3D5C", "06 · 종합 채용 권고",      "McKinsey·Korn Ferry 수준의 임원 평가 리포트 언어로 최종 채용 의사결정을 위한 권고를 제공합니다."),
+]
 
-    <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;padding:1.2rem 1.4rem;border-left:3px solid #B8924A;">
-        <div style="font-size:0.7rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#B8924A;margin-bottom:0.5rem;">01 · 대상자 프로필</div>
-        <div style="font-size:0.82rem;color:#3D3830;line-height:1.7;">
-            종합 한줄 평가와 함께 대상자의 핵심 성향을 <b>태그</b>로 요약해드립니다.
+g_col1, g_col2 = st.columns(2)
+for i, (color, title, desc) in enumerate(guide_items):
+    with (g_col1 if i % 2 == 0 else g_col2):
+        st.markdown(f"""
+        <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;
+                    padding:1.2rem 1.4rem;border-left:3px solid {color};margin-bottom:0.8rem;">
+            <div style="font-size:0.7rem;font-weight:700;letter-spacing:2px;
+                        text-transform:uppercase;color:{color};margin-bottom:0.5rem;">{title}</div>
+            <div style="font-size:0.82rem;color:#3D3830;line-height:1.7;">{desc}</div>
         </div>
-    </div>
+        """, unsafe_allow_html=True)
 
-    <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;padding:1.2rem 1.4rem;border-left:3px solid #2B3D5C;">
-        <div style="font-size:0.7rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#2B3D5C;margin-bottom:0.5rem;">02 · 4개 역량 차원 분석</div>
-        <div style="font-size:0.82rem;color:#3D3830;line-height:1.7;">
-            <b>인지능력 · 잡 전문성 · 적극성 · 리더십</b>을 100점 만점으로 점수화하고 근거를 제시합니다.
-        </div>
-    </div>
-
-    <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;padding:1.2rem 1.4rem;border-left:3px solid #B8924A;">
-        <div style="font-size:0.7rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#B8924A;margin-bottom:0.5rem;">03 · 채용 키워드 TOP 3</div>
-        <div style="font-size:0.82rem;color:#3D3830;line-height:1.7;">
-            STAR 행동사건 면접법 기반의 <b>구체적 질문과 평가 포인트</b>를 순위별로 제공합니다.
-        </div>
-    </div>
-
-    <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;padding:1.2rem 1.4rem;border-left:3px solid #8B2635;">
-        <div style="font-size:0.7rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#8B2635;margin-bottom:0.5rem;">04 · Derailer 위험 요인</div>
-        <div style="font-size:0.82rem;color:#3D3830;line-height:1.7;">
-            Hogan Assessment 기반으로 <b>스트레스 상황에서 나타날 수 있는 부정적 행동 패턴</b>을 사전 식별합니다.
-        </div>
-    </div>
-
-    <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;padding:1.2rem 1.4rem;border-left:3px solid #2D6A4F;">
-        <div style="font-size:0.7rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#2D6A4F;margin-bottom:0.5rem;">05 · 성과 극대화 조건</div>
-        <div style="font-size:0.82rem;color:#3D3830;line-height:1.7;">
-            이 인재가 <b>최고 성과를 낼 수 있는 환경·관리 방식·개발 과제</b>를 제시합니다.
-        </div>
-    </div>
-
-    <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;padding:1.2rem 1.4rem;border-left:3px solid #2B3D5C;">
-        <div style="font-size:0.7rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#2B3D5C;margin-bottom:0.5rem;">06 · 종합 채용 권고</div>
-        <div style="font-size:0.82rem;color:#3D3830;line-height:1.7;">
-            McKinsey·Korn Ferry 수준의 <b>임원 평가 리포트 언어</b>로 최종 채용 의사결정을 위한 권고를 제공합니다.
-        </div>
-    </div>
-
-</div>
-<p style="font-size:0.72rem;color:#B0A898;margin-bottom:0;">
-    ※ 업로드된 자료가 많을수록 분석 정확도가 높아집니다. 자료가 부족한 항목은 가용 정보를 바탕으로 추론합니다.
-</p>
-""", unsafe_allow_html=True)
+st.markdown('<p style="font-size:0.72rem;color:#B0A898;margin-bottom:0;">※ 업로드된 자료가 많을수록 분석 정확도가 높아집니다. 자료가 부족한 항목은 가용 정보를 바탕으로 추론합니다.</p>', unsafe_allow_html=True)
 
 # ── Divider ──
 st.markdown('<div class="hr"></div>', unsafe_allow_html=True)
 
-# ── Run Button ──
-run = st.button("◈  분석 시작", use_container_width=True)
+# ── 아카이브 조회 모드 ──
+if st.session_state.get("show_archive"):
+    idx = st.session_state.get("archive_view", 0)
+    archive_data = load_archive()
+    if 0 <= idx < len(archive_data):
+        rec = archive_data[idx]
+        st.markdown(f"""
+        <div style="background:#EDE8E0;border:1px solid #D4CEC4;border-radius:8px;
+                    padding:0.8rem 1.2rem;margin-bottom:1.5rem;">
+            <span style="font-size:0.8rem;color:#7A7268;">
+                🗂 아카이브 조회 중 &nbsp;·&nbsp;
+                <b style="color:#1A1714;">{rec.get('candidate_name','')}</b> &nbsp;·&nbsp;
+                {rec.get('saved_at','')}
+            </span>
+        </div>
+        """, unsafe_allow_html=True)
+        render_result(rec["result"], rec.get("candidate_name",""))
+    if st.button("← 새 분석으로 돌아가기", use_container_width=True):
+        st.session_state["show_archive"] = False
+        st.rerun()
 
-if run:
-    if not file_data and not candidate_name:
-        st.error("자료를 최소 1개 이상 업로드하거나 성명을 입력해주세요.")
-    else:
-        with st.spinner("분석 중 — 업로드된 자료를 종합 검토하고 있습니다..."):
-            try:
-                R = analyze_candidate(api_key, file_data, candidate_name, company_standard)
+else:
+    # ── Run Button ──
+    run = st.button("◈  분석 시작", use_container_width=True)
 
-                # ── Report Cover ──
-                name_d = candidate_name or "대상자"
-                tags_html = "".join(
-                    f'<span class="tag-chip">{t}</span>'
-                    for t in R.get("personality_tags", [])
-                )
-                st.markdown(f"""
-                <div class="report-cover">
-                    <div class="report-cover-label">◈ Talent Analysis Report</div>
-                    <div class="report-cover-name">{name_d}</div>
-                    <div class="report-cover-summary">{R.get('candidate_summary','')}</div>
-                    <div>{tags_html}</div>
-                </div>
-                """, unsafe_allow_html=True)
+    if run:
+        if not file_data and not candidate_name:
+            st.error("자료를 최소 1개 이상 업로드하거나 성명을 입력해주세요.")
+        else:
+            with st.spinner("분석 중 — 업로드된 자료를 종합 검토하고 있습니다..."):
+                try:
+                    R = analyze_candidate(api_key, file_data, candidate_name, company_standard)
 
-                # ── Dimensions ──
-                st.markdown("""
-                <div class="section-header">
-                    <span class="section-num">03</span>
-                    <span class="section-title">역량 차원 분석</span>
-                    <div class="section-rule"></div>
-                </div>
-                """, unsafe_allow_html=True)
+                    # 아카이브 저장
+                    record = {
+                        "saved_at":       datetime.now().strftime("%Y-%m-%d %H:%M"),
+                        "candidate_name": candidate_name or "이름 없음",
+                        "dept":           candidate_dept,
+                        "result":         R
+                    }
+                    save_to_archive(record)
+                    st.success("✅ 분석 완료 — 왼쪽 아카이브에 자동 저장되었습니다.")
 
-                dims = R.get("dimensions", {})
-                d_col1, d_col2 = st.columns(2)
-                for idx, (key, info) in enumerate(dims.items()):
-                    score = info.get("score", 0)
-                    grade = info.get("grade", "-")
-                    gcolor = grade_color(grade)
-                    ev_html = "".join(
-                        f'<div class="evidence-item"><div class="evidence-dot"></div><span>{e}</span></div>'
-                        for e in info.get("evidence", [])
-                    )
-                    with (d_col1 if idx % 2 == 0 else d_col2):
-                        st.markdown(f"""
-                        <div class="dim-card">
-                            <div class="dim-header">
-                                <div class="dim-icon-title">
-                                    <div class="dim-icon">{dim_icon(key)}</div>
-                                    <div>
-                                        <div class="dim-name">{dim_label(key)}</div>
-                                        <div class="dim-sub">{dim_sublabel(key)}</div>
-                                    </div>
-                                </div>
-                                <div class="dim-score-block">
-                                    <div class="dim-score">{score}<span>/100</span></div>
-                                    <div class="dim-grade" style="color:{gcolor};">{grade}</div>
-                                </div>
-                            </div>
-                            <div class="progress-track">
-                                <div class="progress-fill" style="width:{score}%;"></div>
-                            </div>
-                            <div class="dim-summary">{info.get('summary','')}</div>
-                            <div class="evidence-list">{ev_html}</div>
-                        </div>
-                        """, unsafe_allow_html=True)
+                    render_result(R, candidate_name)
 
-                # ── Keywords ──
-                st.markdown("""
-                <div class="section-header" style="margin-top:2.5rem;">
-                    <span class="section-num">04</span>
-                    <span class="section-title">채용 핵심 키워드 Top 3</span>
-                    <div class="section-rule"></div>
-                </div>
-                <p style="font-size:0.75rem;color:#B0A898;margin:-0.5rem 0 1.5rem 0;">
-                동일 유형 인재 채용 시 면접·서류에서 중점 확인해야 할 체크포인트
-                </p>
-                """, unsafe_allow_html=True)
-
-                rank_classes = ["rank-gold", "rank-silver", "rank-bronze"]
-                rank_labels  = ["1st", "2nd", "3rd"]
-                for kw in R.get("hiring_keywords", []):
-                    r = kw.get("rank", 1) - 1
-                    rc = rank_classes[r] if r < 3 else "rank-bronze"
-                    rl = rank_labels[r] if r < 3 else f"{r+1}th"
-                    st.markdown(f"""
-                    <div class="kw-card">
-                        <div class="kw-rank-col">
-                            <div class="kw-rank-num {rc}">{r+1}</div>
-                            <span class="kw-rank-label">{rl}</span>
-                        </div>
-                        <div>
-                            <div class="kw-title">{kw.get('keyword','')}</div>
-                            <div class="kw-why">{kw.get('why','')}</div>
-                            <div class="kw-how">
-                                <div class="kw-how-label">확인 방법</div>
-                                <div class="kw-how-text">{kw.get('how_to_check','')}</div>
-                            </div>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-                # ── Derailer & Development ──
-                st.markdown("""
-                <div class="section-header" style="margin-top:2.5rem;">
-                    <span class="section-num">05</span>
-                    <span class="section-title">리스크 & 개발 제언</span>
-                    <div class="section-rule"></div>
-                </div>
-                """, unsafe_allow_html=True)
-
-                d1, d2 = st.columns(2)
-                with d1:
-                    st.markdown(f"""
-                    <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;
-                                padding:1.4rem 1.6rem;height:100%;border-left:3px solid #8B2635;">
-                        <div style="font-size:0.65rem;font-weight:700;letter-spacing:3px;
-                                    text-transform:uppercase;color:#8B2635;margin-bottom:0.8rem;">
-                            ⚠ Derailer · 잠재적 위험 요인
-                        </div>
-                        <div style="font-size:0.85rem;color:#3D3830;line-height:1.85;">
-                            {R.get('derailer','자료 부족으로 분석 불가')}
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                with d2:
-                    st.markdown(f"""
-                    <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;
-                                padding:1.4rem 1.6rem;height:100%;border-left:3px solid #2D6A4F;">
-                        <div style="font-size:0.65rem;font-weight:700;letter-spacing:3px;
-                                    text-transform:uppercase;color:#2D6A4F;margin-bottom:0.8rem;">
-                            ◆ Development · 성과 극대화 조건
-                        </div>
-                        <div style="font-size:0.85rem;color:#3D3830;line-height:1.85;">
-                            {R.get('development_suggestion','자료 부족으로 분석 불가')}
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-                # ── Overall Insight ──
-                st.markdown("""
-                <div class="section-header" style="margin-top:2.5rem;">
-                    <span class="section-num">06</span>
-                    <span class="section-title">종합 인사이트 & 채용 권고</span>
-                    <div class="section-rule"></div>
-                </div>
-                """, unsafe_allow_html=True)
-                st.markdown(f"""
-                <div class="insight-box">
-                    <div class="insight-label">◈ Executive Assessment Summary</div>
-                    <div class="insight-text">{R.get('overall_insight','')}</div>
-                </div>
-                """, unsafe_allow_html=True)
-
-                st.markdown("""
-                <div style="text-align:center;padding:2.5rem 0 1rem;font-size:0.65rem;
-                     letter-spacing:3px;text-transform:uppercase;color:#B0A898;">
-                    Assessment Complete &nbsp;·&nbsp; M.I.Tech Talent Intelligence &nbsp;·&nbsp; Confidential
-                </div>
-                """, unsafe_allow_html=True)
-
-            except json.JSONDecodeError:
-                st.error("결과 파싱 오류 — 업로드 자료 확인 후 재시도해주세요.")
-            except anthropic.AuthenticationError:
-                st.error("API Key가 유효하지 않습니다.")
-            except Exception as e:
-                st.error(f"오류 발생: {e}")
+                except json.JSONDecodeError:
+                    st.error("결과 파싱 오류 — 업로드 자료 확인 후 재시도해주세요.")
+                except anthropic.AuthenticationError:
+                    st.error("API Key가 유효하지 않습니다.")
+                except Exception as e:
+                    st.error(f"오류 발생: {e}")
 
 # Footer
 st.markdown("""
