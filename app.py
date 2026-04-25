@@ -1322,7 +1322,7 @@ else:
 
                     # 아카이브 저장
                     record = {
-                        "saved_at":       datetime.now().strftime("%Y-%m-%d %H:%M"),
+                        "saved_at":       datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         "candidate_name": candidate_name or "이름 없음",
                         "dept":           candidate_dept,
                         "result":         R
