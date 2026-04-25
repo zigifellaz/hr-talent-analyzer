@@ -667,6 +667,24 @@ def analyze_candidate(api_key, file_data, candidate_name, company_standard):
 50-59 (B-): 평균 이하. 해당 역량에서 주의 깊은 관찰과 개발 지원 필요.
 49 이하 (C): 유의미한 약점. 해당 역량이 직무 핵심 요건이라면 채용 리스크.
 
+━━━━━━━━━━━━━━━━━━━━━━━━
+번아웃 위험도 평가 기준 (Maslach Burnout Inventory 모델 기반)
+━━━━━━━━━━━━━━━━━━━━━━━━
+번아웃 위험도는 아래 3개 축을 종합하여 LOW / MEDIUM / HIGH / CRITICAL 4단계로 평가합니다:
+- 정서적 고갈 (Emotional Exhaustion): 에너지 소진, 감정적 탈진 신호
+- 비인격화 (Depersonalization): 냉소적 태도, 직무 의미 상실 신호
+- 개인 성취감 저하 (Reduced Personal Accomplishment): 무력감, 자기 효능감 하락 신호
+근거 자료: SNS 어조, 다면평가 결과, 기안서 문체, MBTI 스트레스 반응 패턴 등을 교차 분석
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+이직 가능성 평가 기준 (Push-Pull 모델 기반)
+━━━━━━━━━━━━━━━━━━━━━━━━
+이직 가능성은 아래 Push(현조직 이탈 요인)와 Pull(외부 유인 요인)을 종합하여 LOW / MEDIUM / HIGH / CRITICAL 4단계로 평가합니다:
+- Push 요인: 성장 정체감, 보상 불만족 신호, 관계 갈등, 번아웃 수준
+- Pull 요인: 외부 네트워크 활동성, 스킬 시장가치, 업계 이동성
+- 재직 의향 신호: 장기 프로젝트 참여도, 조직 애착 언어, 커리어 방향성
+근거 자료: 이력서 재직 기간 패턴, SNS 활동, 다면평가 몰입도, 기안서 미래 지향성 등 교차 분석
+
 반드시 아래 JSON 형식으로만 응답하세요. JSON 외 어떤 텍스트도 출력하지 마세요:
 {
   "candidate_summary": "대상자 핵심 특성을 컨설팅 언어로 표현한 한줄 평가 (70자 내외, 구체적 강점과 포지셔닝 포함)",
@@ -696,6 +714,24 @@ def analyze_candidate(api_key, file_data, candidate_name, company_standard):
       "summary": "4-5문장의 전문 컨설팅 수준 분석",
       "evidence": ["근거1", "근거2", "근거3"]
     }
+  },
+  "burnout_risk": {
+    "level": "MEDIUM",
+    "score": 45,
+    "emotional_exhaustion": "정서적 고갈 축 평가 (2-3문장, 자료 기반 근거 포함)",
+    "depersonalization": "비인격화 축 평가 (2-3문장, 자료 기반 근거 포함)",
+    "personal_accomplishment": "개인 성취감 축 평가 (2-3문장, 자료 기반 근거 포함)",
+    "summary": "3가지 축을 종합한 번아웃 위험도 총평 및 조직 관리 권고 (3-4문장)",
+    "evidence": ["근거1", "근거2", "근거3"]
+  },
+  "turnover_risk": {
+    "level": "LOW",
+    "score": 25,
+    "push_factors": "현 조직 이탈 요인 분석 (2-3문장, 자료 기반 근거 포함)",
+    "pull_factors": "외부 유인 요인 분석 (2-3문장, 자료 기반 근거 포함)",
+    "retention_signals": "재직 의향 긍정 신호 분석 (2-3문장)",
+    "summary": "Push-Pull 종합 이직 가능성 총평 및 리텐션 전략 권고 (3-4문장)",
+    "evidence": ["근거1", "근거2", "근거3"]
   },
   "hiring_keywords": [
     {
@@ -873,10 +909,104 @@ def render_result(R: dict, candidate_name: str):
         </div>
         """, unsafe_allow_html=True)
 
-    # ── Derailer & Development ──
+    # ── 번아웃 & 이직 가능성 ──
     st.markdown("""
     <div class="section-header" style="margin-top:2.5rem;">
         <span class="section-num">06</span>
+        <span class="section-title">번아웃 위험도 & 이직 가능성</span>
+        <div class="section-rule"></div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    burnout  = R.get("burnout_risk", {})
+    turnover = R.get("turnover_risk", {})
+
+    def risk_color(level):
+        return {"LOW":"#2D6A4F","MEDIUM":"#8B6914","HIGH":"#8B2635","CRITICAL":"#5C0011"}.get(level,"#7A7268")
+    def risk_label(level):
+        return {"LOW":"낮음","MEDIUM":"주의","HIGH":"높음","CRITICAL":"심각"}.get(level, level)
+    def risk_bar_color(level):
+        return {"LOW":"#2D6A4F","MEDIUM":"#D4AF72","HIGH":"#C0392B","CRITICAL":"#7B0000"}.get(level,"#B0A898")
+
+    b_level  = burnout.get("level","MEDIUM")
+    b_score  = burnout.get("score", 50)
+    t_level  = turnover.get("level","LOW")
+    t_score  = turnover.get("score", 30)
+
+    b_col, t_col = st.columns(2)
+
+    with b_col:
+        bcolor = risk_color(b_level)
+        st.markdown(f"""
+        <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;
+                    padding:1.4rem 1.6rem;border-left:3px solid {bcolor};">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.8rem;">
+                <div style="font-size:0.65rem;font-weight:700;letter-spacing:3px;
+                            text-transform:uppercase;color:{bcolor};">🔥 번아웃 위험도</div>
+                <span style="background:{bcolor};color:white;border-radius:4px;
+                             padding:0.2rem 0.7rem;font-size:0.7rem;font-weight:700;">
+                    {risk_label(b_level)}
+                </span>
+            </div>
+            <div style="background:#E2DDD4;border-radius:999px;height:5px;margin-bottom:1rem;overflow:hidden;">
+                <div style="width:{b_score}%;height:100%;background:{risk_bar_color(b_level)};border-radius:999px;"></div>
+            </div>
+            <div style="font-size:0.8rem;color:#3D3830;line-height:1.75;margin-bottom:0.8rem;">
+                {burnout.get('summary','자료 부족으로 분석 불가')}
+            </div>
+            <div style="border-top:1px solid #E2DDD4;padding-top:0.8rem;">
+                <div style="font-size:0.68rem;color:#B0A898;font-weight:600;margin-bottom:0.4rem;letter-spacing:1px;">세부 분석</div>
+                <div style="font-size:0.75rem;color:#7A7268;margin-bottom:0.3rem;">
+                    <b style="color:#3D3830;">정서적 고갈</b> — {burnout.get('emotional_exhaustion','')}
+                </div>
+                <div style="font-size:0.75rem;color:#7A7268;margin-bottom:0.3rem;">
+                    <b style="color:#3D3830;">비인격화</b> — {burnout.get('depersonalization','')}
+                </div>
+                <div style="font-size:0.75rem;color:#7A7268;">
+                    <b style="color:#3D3830;">성취감</b> — {burnout.get('personal_accomplishment','')}
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with t_col:
+        tcolor = risk_color(t_level)
+        st.markdown(f"""
+        <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;
+                    padding:1.4rem 1.6rem;border-left:3px solid {tcolor};">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.8rem;">
+                <div style="font-size:0.65rem;font-weight:700;letter-spacing:3px;
+                            text-transform:uppercase;color:{tcolor};">🚪 이직 가능성</div>
+                <span style="background:{tcolor};color:white;border-radius:4px;
+                             padding:0.2rem 0.7rem;font-size:0.7rem;font-weight:700;">
+                    {risk_label(t_level)}
+                </span>
+            </div>
+            <div style="background:#E2DDD4;border-radius:999px;height:5px;margin-bottom:1rem;overflow:hidden;">
+                <div style="width:{t_score}%;height:100%;background:{risk_bar_color(t_level)};border-radius:999px;"></div>
+            </div>
+            <div style="font-size:0.8rem;color:#3D3830;line-height:1.75;margin-bottom:0.8rem;">
+                {turnover.get('summary','자료 부족으로 분석 불가')}
+            </div>
+            <div style="border-top:1px solid #E2DDD4;padding-top:0.8rem;">
+                <div style="font-size:0.68rem;color:#B0A898;font-weight:600;margin-bottom:0.4rem;letter-spacing:1px;">세부 분석</div>
+                <div style="font-size:0.75rem;color:#7A7268;margin-bottom:0.3rem;">
+                    <b style="color:#3D3830;">이탈 요인</b> — {turnover.get('push_factors','')}
+                </div>
+                <div style="font-size:0.75rem;color:#7A7268;margin-bottom:0.3rem;">
+                    <b style="color:#3D3830;">외부 유인</b> — {turnover.get('pull_factors','')}
+                </div>
+                <div style="font-size:0.75rem;color:#7A7268;">
+                    <b style="color:#3D3830;">재직 신호</b> — {turnover.get('retention_signals','')}
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # ── Derailer & Development ──
+    st.markdown("""
+    <div class="section-header" style="margin-top:2.5rem;">
+        <span class="section-num">07</span>
         <span class="section-title">리스크 & 개발 제언</span>
         <div class="section-rule"></div>
     </div>
@@ -913,7 +1043,7 @@ def render_result(R: dict, candidate_name: str):
     # ── Overall Insight ──
     st.markdown("""
     <div class="section-header" style="margin-top:2.5rem;">
-        <span class="section-num">07</span>
+        <span class="section-num">08</span>
         <span class="section-title">종합 인사이트 & 채용 권고</span>
         <div class="section-rule"></div>
     </div>
