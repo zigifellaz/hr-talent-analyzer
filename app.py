@@ -765,13 +765,17 @@ def analyze_candidate(api_key, file_data, candidate_name, company_standard):
 
     response = client.messages.create(
         model="claude-opus-4-5",
-        max_tokens=6000,
+        max_tokens=8000,
         system=system_prompt,
         messages=[{"role": "user", "content": user_content}]
     )
     raw = response.content[0].text.strip()
     raw = re.sub(r"^```(?:json)?\s*", "", raw)
     raw = re.sub(r"\s*```$", "", raw)
+    # JSON 블록만 추출 (앞뒤 여분 텍스트 제거)
+    match = re.search(r'\{[\s\S]+\}', raw)
+    if match:
+        raw = match.group(0)
     return json.loads(raw)
 
 
@@ -1310,10 +1314,12 @@ else:
 
                     render_result(R, candidate_name)
 
-                except json.JSONDecodeError:
-                    st.error("결과 파싱 오류 — 업로드 자료 확인 후 재시도해주세요.")
+                except json.JSONDecodeError as e:
+                    st.error(f"결과 파싱 오류 — AI 응답을 해석하지 못했습니다. 잠시 후 다시 시도해주세요. (상세: {str(e)[:80]})")
                 except anthropic.AuthenticationError:
-                    st.error("API Key가 유효하지 않습니다.")
+                    st.error("API Key가 유효하지 않습니다. Streamlit Secrets를 확인해주세요.")
+                except anthropic.APIStatusError as e:
+                    st.error(f"API 오류 ({e.status_code}): {str(e.message)[:120]}")
                 except Exception as e:
                     st.error(f"오류 발생: {e}")
 
