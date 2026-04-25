@@ -1035,8 +1035,20 @@ with c2:
 
 company_standard = st.text_area(
     "회사 인재상",
-    placeholder="예: 도전정신, 전문성, 협업능력, 고객 중심 사고, 글로벌 역량...",
-    height=72
+    value="""1) 성장지향: 목표 의식이 뚜렷하며, 조직과 개인의 동반 성장을 위해 노력하는 분
+2) 상호존중: 동료 간의 상호 존중과 팀워크의 가치를 소중히 여기는 분
+3) 혁신과 도전: 지속적인 학습과 도전을 통해 끊임없이 혁신을 추구하는 분""",
+    height=110
+)
+
+core_culture = st.text_area(
+    "회사 5대 핵심문화 축",
+    value="""1) 개방적 소통 탁월성 (Open communication excellence)
+2) 몰입 기반 실행력 (Commitment-driven execution)
+3) 성과 기반 인정 체계 (Performance-based recognition)
+4) 협업 시너지 (Collaborative synergy)
+5) 혁신 리더십 (Innovation leadership)""",
+    height=140
 )
 
 # ── Section 2: Upload ──
@@ -1085,6 +1097,8 @@ if candidate_dept:
     file_data["소속 부서"] = candidate_dept
 if company_standard:
     file_data["회사 인재상"] = company_standard
+if core_culture:
+    file_data["회사 5대 핵심문화 축"] = core_culture
 
 # ── Section 3: 분석 결과 안내 ──
 st.markdown("""
