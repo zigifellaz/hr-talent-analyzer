@@ -611,36 +611,124 @@ def build_user_content(file_data, candidate_name, company_standard):
 
 def analyze_candidate(api_key, file_data, candidate_name, company_standard):
     client = anthropic.Anthropic(api_key=api_key)
-    system_prompt = """당신은 기업 HR 전문가이자 조직심리학자입니다.
-제공된 자료를 바탕으로 해당 인원을 4개 차원에서 전문 분석하고, 동일 유형 인재 채용 키워드를 순위별로 제시하세요.
+    system_prompt = """당신은 글로벌 탑티어 HR 컨설팅 펌(McKinsey People & Organization, Korn Ferry, Spencer Stuart 수준)의 수석 어세스먼트 컨설턴트입니다. 조직심리학 박사 학위와 15년 이상의 임원 평가 및 인재 어세스먼트 경험을 보유하고 있습니다.
 
-반드시 아래 JSON 형식으로만 응답하세요:
+당신의 분석은 다음 프레임워크를 통합적으로 적용합니다:
+- Korn Ferry의 Leadership Architect (역량 모델 67개 팩터)
+- SHL의 OPQ32 (성격 및 행동 선호도 측정)
+- Hogan Assessment의 HPI/HDS/MVPI (명시적 성격 / 암묵적 위험 요소 / 동기 가치 체계)
+- DDI의 Targeted Selection (행동사건 면접법 기반 역량 평가)
+- MBTI 및 Big Five(OCEAN) 모델과의 교차 검증
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+분석 원칙
+━━━━━━━━━━━━━━━━━━━━━━━━
+1. 근거 기반 추론: 모든 평가는 제공된 자료에서 직접 인용 가능한 구체적 근거를 바탕으로 합니다. 추측성 표현("~할 것 같다") 대신 행동 증거 기반 표현("~한 이력이 확인된다")을 사용합니다.
+2. 다층적 교차 검증: 단일 자료가 아닌 복수 자료 간 일관성·불일치를 분석하여 표면 행동과 내재 동기를 구분합니다.
+3. 조직 적합도 연계: 개인 역량 분석을 회사 인재상 및 직무 요구사항과 명시적으로 연결합니다.
+4. 위험 요인 식별: 강점 이면의 잠재적 취약점(Derailer)을 전문가 시각으로 도출합니다.
+5. 실용적 채용 전환: 분석 결과를 실제 채용 현장에서 즉시 활용 가능한 행동 지표로 전환합니다.
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+각 차원별 평가 기준
+━━━━━━━━━━━━━━━━━━━━━━━━
+[인지 능력 - Cognitive Ability]
+- 개념적 사고력: 복잡한 정보를 구조화하고 패턴을 도출하는 능력
+- 분석적 추론: 데이터/상황에서 핵심 변수를 식별하고 인과관계를 파악하는 능력
+- 학습 민첩성 (Learning Agility): 새로운 환경과 정보에 빠르게 적응하는 능력
+- 의사결정 질: 불확실한 상황에서 논리적이고 신속한 판단을 내리는 능력
+
+[잡 전문성 - Job Expertise]
+- 직무 지식 깊이: 해당 산업/직무의 핵심 지식 및 기술 수준
+- 실행 역량: 지식을 실제 성과로 전환하는 능력 (KPI 달성 이력 포함)
+- 도메인 네트워크: 업계 내 관계망과 시장 이해도
+- 글로벌 역량: 크로스컬처 환경에서의 협업·소통 능력
+
+[적극성 - Proactiveness]
+- 주도성 (Initiative): 지시 없이 과제를 발굴하고 선제적으로 행동하는 성향
+- 결과 지향성 (Achievement Drive): 목표 달성에 대한 내적 동기 강도
+- 변화 주도: 현상 유지보다 개선과 혁신을 추구하는 성향
+- 역경 극복 (Resilience): 실패와 장애 상황에서의 회복탄력성
+
+[리더십 - Leadership]
+- 영향력 행사: 공식 권한 없이도 타인을 설득하고 이끄는 능력
+- 팀 개발: 구성원의 성장을 지원하고 동기를 부여하는 능력
+- 전략적 방향 설정: 조직의 장기 비전을 수립하고 전달하는 능력
+- 이해관계자 관리: 내외부 이해관계자와의 관계를 전략적으로 구축하는 능력
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+점수 산출 기준 (100점 만점)
+━━━━━━━━━━━━━━━━━━━━━━━━
+90-100 (S): 동종업계 상위 5% 수준. 해당 역량의 롤모델.
+80-89 (A): 상위 15% 수준. 명확한 강점으로 조직에 즉각적 기여 가능.
+70-79 (B+): 상위 30% 수준. 강점이 있으나 일부 개발 영역 존재.
+60-69 (B): 평균 수준. 기본 역량은 갖추었으나 차별화 요소 미흡.
+50-59 (B-): 평균 이하. 해당 역량에서 주의 깊은 관찰과 개발 지원 필요.
+49 이하 (C): 유의미한 약점. 해당 역량이 직무 핵심 요건이라면 채용 리스크.
+
+반드시 아래 JSON 형식으로만 응답하세요. JSON 외 어떤 텍스트도 출력하지 마세요:
 {
-  "candidate_summary": "대상자 종합 한줄 평가 (60자 내외)",
-  "personality_tags": ["태그1","태그2","태그3","태그4","태그5"],
+  "candidate_summary": "대상자 핵심 특성을 컨설팅 언어로 표현한 한줄 평가 (70자 내외, 구체적 강점과 포지셔닝 포함)",
+  "personality_tags": ["핵심역량태그1","핵심역량태그2","성향태그3","리스크태그4","포지셔닝태그5"],
   "dimensions": {
-    "cognitive_ability": {"score":75,"grade":"B+","summary":"3-4문장 분석","evidence":["근거1","근거2","근거3"]},
-    "job_expertise":     {"score":80,"grade":"A", "summary":"3-4문장 분석","evidence":["근거1","근거2","근거3"]},
-    "proactiveness":     {"score":70,"grade":"B", "summary":"3-4문장 분석","evidence":["근거1","근거2","근거3"]},
-    "leadership":        {"score":65,"grade":"B-","summary":"3-4문장 분석","evidence":["근거1","근거2","근거3"]}
+    "cognitive_ability": {
+      "score": 75,
+      "grade": "B+",
+      "summary": "4-5문장의 전문 컨설팅 수준 분석. 강점의 구체적 발현 방식, 내재된 인지 패턴, 조직 내 활용 가능성, 잠재적 한계까지 포함",
+      "evidence": ["자료에서 직접 확인된 구체적 행동 근거 1", "수치나 사례가 포함된 근거 2", "복수 자료 교차 확인된 근거 3"]
+    },
+    "job_expertise": {
+      "score": 80,
+      "grade": "A",
+      "summary": "4-5문장의 전문 컨설팅 수준 분석",
+      "evidence": ["근거1", "근거2", "근거3"]
+    },
+    "proactiveness": {
+      "score": 70,
+      "grade": "B",
+      "summary": "4-5문장의 전문 컨설팅 수준 분석",
+      "evidence": ["근거1", "근거2", "근거3"]
+    },
+    "leadership": {
+      "score": 65,
+      "grade": "B-",
+      "summary": "4-5문장의 전문 컨설팅 수준 분석",
+      "evidence": ["근거1", "근거2", "근거3"]
+    }
   },
   "hiring_keywords": [
-    {"rank":1,"keyword":"키워드","why":"2-3문장 선정 이유","how_to_check":"구체적 확인 방법"},
-    {"rank":2,"keyword":"키워드","why":"2-3문장 선정 이유","how_to_check":"구체적 확인 방법"},
-    {"rank":3,"keyword":"키워드","why":"2-3문장 선정 이유","how_to_check":"구체적 확인 방법"}
+    {
+      "rank": 1,
+      "keyword": "10자 이내 핵심 역량 키워드",
+      "why": "이 키워드가 1순위인 이유를 회사 인재상·직무 요건과 연결하여 3-4문장으로 설명. 해당 인재 유형의 본질적 특성과 연결",
+      "how_to_check": "면접관이 실제로 사용할 수 있는 구체적 질문 2가지와 평가 포인트 포함. 행동사건 면접법(STAR: Situation-Task-Action-Result) 기반으로 작성"
+    },
+    {
+      "rank": 2,
+      "keyword": "10자 이내 핵심 역량 키워드",
+      "why": "3-4문장 설명",
+      "how_to_check": "구체적 질문과 평가 포인트"
+    },
+    {
+      "rank": 3,
+      "keyword": "10자 이내 핵심 역량 키워드",
+      "why": "3-4문장 설명",
+      "how_to_check": "구체적 질문과 평가 포인트"
+    }
   ],
-  "overall_insight": "전체 인재 유형 심층 인사이트 및 조직 내 예상 역할 (4-5문장)"
-}
-점수 100점 만점. 자료 없는 항목은 가용 정보로 추론 후 표기."""
+  "derailer": "이 인재 유형의 잠재적 위험 요소(Derailer) — 스트레스 상황이나 장기 재직 시 나타날 수 있는 부정적 행동 패턴과 조직 내 주의사항을 2-3문장으로 기술",
+  "development_suggestion": "이 인재가 조직에서 최고 성과를 내기 위해 필요한 환경 조건·관리 방식·개발 과제를 2-3문장으로 제시",
+  "overall_insight": "McKinsey, Korn Ferry 수준의 임원 평가 리포트 언어로 작성한 종합 인사이트. 대상자의 인재 유형 명명, 조직 내 최적 포지셔닝, 단기·중장기 기여 가능성, 채용 의사결정을 위한 최종 권고를 5-6문장으로 기술"
+}"""
 
     user_content = build_user_content(file_data, candidate_name, company_standard)
     if not user_content:
         raise ValueError("분석할 자료가 없습니다.")
-    user_content.append({"type": "text", "text": "위 자료를 바탕으로 JSON 형식으로 인재 분석을 수행해주세요."})
+    user_content.append({"type": "text", "text": "위 자료를 바탕으로 글로벌 탑티어 HR 컨설팅 펌 수준의 전문 인재 분석을 JSON 형식으로 수행해주세요. 모든 평가는 제공된 자료의 구체적 근거에 기반해야 하며, 표면적 관찰을 넘어 내재된 역량 패턴과 조직 적합도를 심층 분석해주세요."})
 
     response = client.messages.create(
         model="claude-opus-4-5",
-        max_tokens=4000,
+        max_tokens=6000,
         system=system_prompt,
         messages=[{"role": "user", "content": user_content}]
     )
@@ -713,51 +801,112 @@ company_standard = st.text_area(
     height=72
 )
 
-# ── Section 3: Upload ──
+# ── Section 2: Upload ──
 st.markdown("""
 <div class="section-header">
     <span class="section-num">02</span>
     <span class="section-title">자료 업로드</span>
     <div class="section-rule"></div>
 </div>
-<p style="font-size:0.75rem;color:#B0A898;margin:-0.5rem 0 1.2rem 0;">
-PDF · DOCX · JPG · PNG · TXT 지원 &nbsp;|&nbsp; 없는 항목은 건너뜁니다
-</p>
 """, unsafe_allow_html=True)
 
-upload_items = [
-    ("이력서 / 자기소개서",  "resume",    "학력·경력·수상·자격증"),
-    ("다면평가 결과",        "peer_eval", "상사·동료·부하 다방향 평가"),
-    ("대상자 작성 기안서",   "proposal",  "품의서·기획안·보고서"),
-    ("MBTI 결과",           "mbti",      "유형지 또는 스크린샷"),
-    ("인적성 검사 결과표",   "aptitude",  "인지·성격 검사 점수"),
-    ("SNS / 포트폴리오",    "sns",       "LinkedIn·블로그·GitHub"),
-    ("소속 부서 자료",       "dept_info", "팀 미션·조직도"),
-    ("회사 인재상 파일",     "talent_std","별도 파일 제출 시"),
-]
+st.markdown("""
+<div style="background:white;border:1px solid #D4CEC4;border-radius:8px;padding:1.2rem 1.5rem;margin-bottom:1rem;">
+    <p style="font-size:0.8rem;font-weight:600;color:#1A1714;margin-bottom:0.6rem;">📎 아래 자료를 한꺼번에 선택해서 업로드하세요</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.3rem 2rem;">
+        <div style="font-size:0.75rem;color:#7A7268;">✦ 이력서 / 자기소개서</div>
+        <div style="font-size:0.75rem;color:#7A7268;">✦ 다면평가 결과</div>
+        <div style="font-size:0.75rem;color:#7A7268;">✦ 대상자 작성 기안서</div>
+        <div style="font-size:0.75rem;color:#7A7268;">✦ MBTI 결과 (스크린샷 가능)</div>
+        <div style="font-size:0.75rem;color:#7A7268;">✦ 인적성 검사 결과표</div>
+        <div style="font-size:0.75rem;color:#7A7268;">✦ SNS / 포트폴리오</div>
+        <div style="font-size:0.75rem;color:#7A7268;">✦ 소속 부서 자료</div>
+        <div style="font-size:0.75rem;color:#7A7268;">✦ 회사 인재상 파일</div>
+    </div>
+    <p style="font-size:0.7rem;color:#B0A898;margin-top:0.8rem;margin-bottom:0;">
+        PDF · DOCX · JPG · PNG · TXT 지원 &nbsp;|&nbsp; 없는 자료는 건너뛰어도 됩니다
+    </p>
+</div>
+""", unsafe_allow_html=True)
+
+uploaded_files = st.file_uploader(
+    "파일을 여기에 끌어다 놓거나 클릭해서 선택하세요 (여러 파일 동시 선택 가능)",
+    type=["pdf","docx","jpg","jpeg","png","webp","txt","md"],
+    accept_multiple_files=True,
+    label_visibility="visible"
+)
 
 file_data = {}
-col_a, col_b = st.columns(2)
-for i, (label, key, desc) in enumerate(upload_items):
-    with (col_a if i % 2 == 0 else col_b):
-        st.markdown(f"""
-        <div class="upload-item">
-            <div class="upload-item-title">{label}</div>
-            <div class="upload-item-desc">{desc}</div>
-        </div>
-        """, unsafe_allow_html=True)
-        uploaded = st.file_uploader(
-            f"_{key}", key=key, label_visibility="collapsed",
-            type=["pdf","docx","jpg","jpeg","png","webp","txt","md"]
-        )
-        if uploaded:
-            file_data[label] = read_file_content(uploaded)
-            st.caption(f"✓ {uploaded.name}")
+if uploaded_files:
+    st.markdown(f'<p style="font-size:0.78rem;color:#2D6A4F;margin:0.5rem 0;">✅ {len(uploaded_files)}개 파일 업로드 완료</p>', unsafe_allow_html=True)
+    for uploaded in uploaded_files:
+        content = read_file_content(uploaded)
+        file_data[uploaded.name] = content
 
 if candidate_dept:
     file_data["소속 부서"] = candidate_dept
 if company_standard:
     file_data["회사 인재상"] = company_standard
+
+# ── Section 3: 분석 결과 안내 ──
+st.markdown("""
+<div class="section-header">
+    <span class="section-num">03</span>
+    <span class="section-title">분석 결과 안내</span>
+    <div class="section-rule"></div>
+</div>
+""", unsafe_allow_html=True)
+
+st.markdown("""
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1rem;">
+
+    <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;padding:1.2rem 1.4rem;border-left:3px solid #B8924A;">
+        <div style="font-size:0.7rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#B8924A;margin-bottom:0.5rem;">01 · 대상자 프로필</div>
+        <div style="font-size:0.82rem;color:#3D3830;line-height:1.7;">
+            종합 한줄 평가와 함께 대상자의 핵심 성향을 <b>태그</b>로 요약해드립니다.
+        </div>
+    </div>
+
+    <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;padding:1.2rem 1.4rem;border-left:3px solid #2B3D5C;">
+        <div style="font-size:0.7rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#2B3D5C;margin-bottom:0.5rem;">02 · 4개 역량 차원 분석</div>
+        <div style="font-size:0.82rem;color:#3D3830;line-height:1.7;">
+            <b>인지능력 · 잡 전문성 · 적극성 · 리더십</b>을 100점 만점으로 점수화하고 근거를 제시합니다.
+        </div>
+    </div>
+
+    <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;padding:1.2rem 1.4rem;border-left:3px solid #B8924A;">
+        <div style="font-size:0.7rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#B8924A;margin-bottom:0.5rem;">03 · 채용 키워드 TOP 3</div>
+        <div style="font-size:0.82rem;color:#3D3830;line-height:1.7;">
+            STAR 행동사건 면접법 기반의 <b>구체적 질문과 평가 포인트</b>를 순위별로 제공합니다.
+        </div>
+    </div>
+
+    <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;padding:1.2rem 1.4rem;border-left:3px solid #8B2635;">
+        <div style="font-size:0.7rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#8B2635;margin-bottom:0.5rem;">04 · Derailer 위험 요인</div>
+        <div style="font-size:0.82rem;color:#3D3830;line-height:1.7;">
+            Hogan Assessment 기반으로 <b>스트레스 상황에서 나타날 수 있는 부정적 행동 패턴</b>을 사전 식별합니다.
+        </div>
+    </div>
+
+    <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;padding:1.2rem 1.4rem;border-left:3px solid #2D6A4F;">
+        <div style="font-size:0.7rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#2D6A4F;margin-bottom:0.5rem;">05 · 성과 극대화 조건</div>
+        <div style="font-size:0.82rem;color:#3D3830;line-height:1.7;">
+            이 인재가 <b>최고 성과를 낼 수 있는 환경·관리 방식·개발 과제</b>를 제시합니다.
+        </div>
+    </div>
+
+    <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;padding:1.2rem 1.4rem;border-left:3px solid #2B3D5C;">
+        <div style="font-size:0.7rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#2B3D5C;margin-bottom:0.5rem;">06 · 종합 채용 권고</div>
+        <div style="font-size:0.82rem;color:#3D3830;line-height:1.7;">
+            McKinsey·Korn Ferry 수준의 <b>임원 평가 리포트 언어</b>로 최종 채용 의사결정을 위한 권고를 제공합니다.
+        </div>
+    </div>
+
+</div>
+<p style="font-size:0.72rem;color:#B0A898;margin-bottom:0;">
+    ※ 업로드된 자료가 많을수록 분석 정확도가 높아집니다. 자료가 부족한 항목은 가용 정보를 바탕으로 추론합니다.
+</p>
+""", unsafe_allow_html=True)
 
 # ── Divider ──
 st.markdown('<div class="hr"></div>', unsafe_allow_html=True)
@@ -866,17 +1015,54 @@ if run:
                     </div>
                     """, unsafe_allow_html=True)
 
-                # ── Insight ──
+                # ── Derailer & Development ──
                 st.markdown("""
                 <div class="section-header" style="margin-top:2.5rem;">
                     <span class="section-num">05</span>
-                    <span class="section-title">종합 인사이트</span>
+                    <span class="section-title">리스크 & 개발 제언</span>
+                    <div class="section-rule"></div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                d1, d2 = st.columns(2)
+                with d1:
+                    st.markdown(f"""
+                    <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;
+                                padding:1.4rem 1.6rem;height:100%;border-left:3px solid #8B2635;">
+                        <div style="font-size:0.65rem;font-weight:700;letter-spacing:3px;
+                                    text-transform:uppercase;color:#8B2635;margin-bottom:0.8rem;">
+                            ⚠ Derailer · 잠재적 위험 요인
+                        </div>
+                        <div style="font-size:0.85rem;color:#3D3830;line-height:1.85;">
+                            {R.get('derailer','자료 부족으로 분석 불가')}
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                with d2:
+                    st.markdown(f"""
+                    <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;
+                                padding:1.4rem 1.6rem;height:100%;border-left:3px solid #2D6A4F;">
+                        <div style="font-size:0.65rem;font-weight:700;letter-spacing:3px;
+                                    text-transform:uppercase;color:#2D6A4F;margin-bottom:0.8rem;">
+                            ◆ Development · 성과 극대화 조건
+                        </div>
+                        <div style="font-size:0.85rem;color:#3D3830;line-height:1.85;">
+                            {R.get('development_suggestion','자료 부족으로 분석 불가')}
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                # ── Overall Insight ──
+                st.markdown("""
+                <div class="section-header" style="margin-top:2.5rem;">
+                    <span class="section-num">06</span>
+                    <span class="section-title">종합 인사이트 & 채용 권고</span>
                     <div class="section-rule"></div>
                 </div>
                 """, unsafe_allow_html=True)
                 st.markdown(f"""
                 <div class="insight-box">
-                    <div class="insight-label">◈ Overall Insight</div>
+                    <div class="insight-label">◈ Executive Assessment Summary</div>
                     <div class="insight-text">{R.get('overall_insight','')}</div>
                 </div>
                 """, unsafe_allow_html=True)
@@ -884,7 +1070,7 @@ if run:
                 st.markdown("""
                 <div style="text-align:center;padding:2.5rem 0 1rem;font-size:0.65rem;
                      letter-spacing:3px;text-transform:uppercase;color:#B0A898;">
-                    Analysis Complete &nbsp;·&nbsp; M.I.Tech Talent Intelligence &nbsp;·&nbsp; Internal Use Only
+                    Assessment Complete &nbsp;·&nbsp; M.I.Tech Talent Intelligence &nbsp;·&nbsp; Confidential
                 </div>
                 """, unsafe_allow_html=True)
 
