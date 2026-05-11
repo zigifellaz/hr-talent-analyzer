@@ -545,6 +545,12 @@ div[data-testid="stExpander"] {
 /* ── Success / Error ── */
 .stSuccess { background: #EAF4EE !important; border-color: var(--green) !important; }
 .stError { background: #FAEAEC !important; border-color: var(--red) !important; }
+
+/* ── 새 분석 시작 버튼 (골드 계열) ── */
+[data-testid="stButton"] button[kind="secondary"],
+div:has(> [data-testid="stButton"]:first-child) button {
+    background: white !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -1406,37 +1412,61 @@ if st.session_state.get("show_archive"):
         st.rerun()
 
 else:
-    # ── Run Button ──
-    run = st.button("◈  분석 시작", use_container_width=True)
+    # ── 분석 완료 상태면 결과 + 새 분석 버튼 표시 ──
+    if st.session_state.get("analysis_done"):
+        # 새 분석 시작 버튼
+        st.markdown('<div style="height:0.5rem;"></div>', unsafe_allow_html=True)
+        if st.button("✦  새 분석 시작", use_container_width=True):
+            st.session_state["analysis_done"] = False
+            st.session_state["analysis_result"] = None
+            st.session_state["analysis_name"] = None
+            st.rerun()
 
-    if run:
-        if not file_data and not candidate_name:
-            st.error("자료를 최소 1개 이상 업로드하거나 성명을 입력해주세요.")
-        else:
-            with st.spinner("분석 중 — 업로드된 자료를 종합 검토하고 있습니다..."):
-                try:
-                    R = analyze_candidate(api_key, file_data, candidate_name, company_standard)
+        # 구분선
+        st.markdown('<div style="height:1rem;"></div>', unsafe_allow_html=True)
+        st.success("✅ 분석 완료 — 왼쪽 아카이브에 자동 저장되었습니다.")
 
-                    # 아카이브 저장
-                    record = {
-                        "saved_at":       datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        "candidate_name": candidate_name or "이름 없음",
-                        "dept":           candidate_dept,
-                        "result":         R
-                    }
-                    save_to_archive(record)
-                    st.success("✅ 분석 완료 — 왼쪽 아카이브에 자동 저장되었습니다.")
+        # 결과 렌더링
+        render_result(
+            st.session_state["analysis_result"],
+            st.session_state["analysis_name"]
+        )
 
-                    render_result(R, candidate_name)
+    else:
+        # ── Run Button ──
+        run = st.button("◈  분석 시작", use_container_width=True)
 
-                except json.JSONDecodeError as e:
-                    st.error(f"결과 파싱 오류 — AI 응답을 해석하지 못했습니다. 잠시 후 다시 시도해주세요. (상세: {str(e)[:80]})")
-                except anthropic.AuthenticationError:
-                    st.error("API Key가 유효하지 않습니다. Streamlit Secrets를 확인해주세요.")
-                except anthropic.APIStatusError as e:
-                    st.error(f"API 오류 ({e.status_code}): {str(e.message)[:120]}")
-                except Exception as e:
-                    st.error(f"오류 발생: {e}")
+        if run:
+            if not file_data and not candidate_name:
+                st.error("자료를 최소 1개 이상 업로드하거나 성명을 입력해주세요.")
+            else:
+                with st.spinner("분석 중 — 업로드된 자료를 종합 검토하고 있습니다..."):
+                    try:
+                        R = analyze_candidate(api_key, file_data, candidate_name, company_standard)
+
+                        # 아카이브 저장
+                        record = {
+                            "saved_at":       datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            "candidate_name": candidate_name or "이름 없음",
+                            "dept":           candidate_dept,
+                            "result":         R
+                        }
+                        save_to_archive(record)
+
+                        # 결과를 session_state에 저장 후 rerun
+                        st.session_state["analysis_done"]   = True
+                        st.session_state["analysis_result"] = R
+                        st.session_state["analysis_name"]   = candidate_name
+                        st.rerun()
+
+                    except json.JSONDecodeError as e:
+                        st.error(f"결과 파싱 오류 — AI 응답을 해석하지 못했습니다. 잠시 후 다시 시도해주세요. (상세: {str(e)[:80]})")
+                    except anthropic.AuthenticationError:
+                        st.error("API Key가 유효하지 않습니다. Streamlit Secrets를 확인해주세요.")
+                    except anthropic.APIStatusError as e:
+                        st.error(f"API 오류 ({e.status_code}): {str(e.message)[:120]}")
+                    except Exception as e:
+                        st.error(f"오류 발생: {e}")
 
 # Footer
 st.markdown("""
