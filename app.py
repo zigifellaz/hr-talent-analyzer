@@ -574,7 +574,6 @@ def read_file_content(uploaded_file) -> str:
         except Exception:
             return "[DOCX — 텍스트 추출 실패]"
     if any(name.endswith(e) for e in [".jpg", ".jpeg", ".png", ".webp", ".gif"]):
-        # 확장자 기반으로 MIME 타입 직접 지정 (uploaded_file.type 신뢰 안 함)
         ext_mime = {
             ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
             ".png": "image/png", ".webp": "image/webp",
@@ -582,7 +581,8 @@ def read_file_content(uploaded_file) -> str:
         }
         mime = next((v for k, v in ext_mime.items() if name.endswith(k)), "image/jpeg")
         b64 = base64.standard_b64encode(content).decode()
-        return f"__IMAGE__{name}__BASE64__{b64}__MIMETYPE__{mime}"
+        # JSON으로 직렬화 (base64 안의 __ 충돌 방지)
+        return "__IMGOBJ__" + json.dumps({"mime": mime, "b64": b64})
     try:
         return content.decode("utf-8")
     except Exception:
@@ -600,24 +600,25 @@ def build_user_content(file_data, candidate_name, company_standard):
     if company_standard:
         text_parts.append(f"[회사 인재상]\n{company_standard}")
     for label, content in file_data.items():
-        if content and not content.startswith("__IMAGE__"):
+        if content and not content.startswith("__IMGOBJ__"):
             text_parts.append(f"[{label}]\n{content}")
     if text_parts:
         user_content.append({"type": "text", "text": "\n\n".join(text_parts)})
     for label, content in file_data.items():
-        if content and content.startswith("__IMAGE__"):
+        if content and content.startswith("__IMGOBJ__"):
             try:
-                parts = content.split("__")
-                b64_data = parts[4]
-                mime_type = parts[6] if len(parts) > 6 else "image/jpeg"
-                # MIME 타입 유효성 검사
+                img = json.loads(content[len("__IMGOBJ__"):])
+                mime_type = img.get("mime", "image/jpeg")
+                b64_data  = img.get("b64", "")
                 valid_mimes = ["image/jpeg", "image/png", "image/webp", "image/gif"]
                 if mime_type not in valid_mimes:
                     mime_type = "image/jpeg"
-                # base64 유효성 간단 체크
-                if len(b64_data) < 10:
+                if not b64_data:
                     continue
-                user_content.append({"type": "image", "source": {"type": "base64", "media_type": mime_type, "data": b64_data}})
+                user_content.append({
+                    "type": "image",
+                    "source": {"type": "base64", "media_type": mime_type, "data": b64_data}
+                })
                 user_content.append({"type": "text", "text": f"위 이미지는 [{label}] 자료입니다."})
             except Exception:
                 pass
