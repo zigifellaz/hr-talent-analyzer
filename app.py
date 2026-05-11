@@ -546,10 +546,12 @@ div[data-testid="stExpander"] {
 .stSuccess { background: #EAF4EE !important; border-color: var(--green) !important; }
 .stError { background: #FAEAEC !important; border-color: var(--red) !important; }
 
-/* ── 새 분석 시작 버튼 (골드 계열) ── */
-[data-testid="stButton"] button[kind="secondary"],
-div:has(> [data-testid="stButton"]:first-child) button {
+/* ── 새 분석 시작 버튼 ── */
+.new-analysis-btn > div > button {
     background: white !important;
+    color: var(--ink) !important;
+    border: 1.5px solid var(--gold) !important;
+    color: var(--gold) !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -1414,19 +1416,31 @@ if st.session_state.get("show_archive"):
 else:
     # ── 분석 완료 상태면 결과 + 새 분석 버튼 표시 ──
     if st.session_state.get("analysis_done"):
-        # 새 분석 시작 버튼
-        st.markdown('<div style="height:0.5rem;"></div>', unsafe_allow_html=True)
-        if st.button("✦  새 분석 시작", use_container_width=True):
-            st.session_state["analysis_done"] = False
+
+        # 새 분석 시작 버튼 (상단 고정)
+        st.markdown("""
+        <div style="background:#FBF8F3;border:1.5px solid #B8924A;border-radius:8px;
+                    padding:1rem 1.5rem;margin-bottom:1.2rem;display:flex;
+                    align-items:center;justify-content:space-between;">
+            <div>
+                <span style="font-size:0.75rem;font-weight:700;letter-spacing:2px;
+                             text-transform:uppercase;color:#B8924A;">분석 완료</span>
+                <span style="font-size:0.8rem;color:#7A7268;margin-left:0.8rem;">
+                    새 대상자를 분석하려면 오른쪽 버튼을 클릭하세요
+                </span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        if st.button("✦  새 분석 시작 — 초기화", use_container_width=True):
+            st.session_state["analysis_done"]   = False
             st.session_state["analysis_result"] = None
-            st.session_state["analysis_name"] = None
+            st.session_state["analysis_name"]   = None
             st.rerun()
 
-        # 구분선
-        st.markdown('<div style="height:1rem;"></div>', unsafe_allow_html=True)
+        st.markdown('<div style="height:0.5rem;"></div>', unsafe_allow_html=True)
         st.success("✅ 분석 완료 — 왼쪽 아카이브에 자동 저장되었습니다.")
 
-        # 결과 렌더링
         render_result(
             st.session_state["analysis_result"],
             st.session_state["analysis_name"]
@@ -1437,8 +1451,11 @@ else:
         run = st.button("◈  분석 시작", use_container_width=True)
 
         if run:
-            if not file_data and not candidate_name:
-                st.error("자료를 최소 1개 이상 업로드하거나 성명을 입력해주세요.")
+            # 파일 필수 체크 (이름만으론 분석 불가)
+            if not uploaded_files:
+                st.error("⚠️ 최소 1개 이상의 파일을 업로드해야 분석할 수 있습니다.")
+            elif not candidate_name:
+                st.error("⚠️ 대상자 성명을 입력해주세요.")
             else:
                 with st.spinner("분석 중 — 업로드된 자료를 종합 검토하고 있습니다..."):
                     try:
