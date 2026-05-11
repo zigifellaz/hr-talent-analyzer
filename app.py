@@ -574,8 +574,15 @@ def read_file_content(uploaded_file) -> str:
         except Exception:
             return "[DOCX — 텍스트 추출 실패]"
     if any(name.endswith(e) for e in [".jpg", ".jpeg", ".png", ".webp", ".gif"]):
+        # 확장자 기반으로 MIME 타입 직접 지정 (uploaded_file.type 신뢰 안 함)
+        ext_mime = {
+            ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+            ".png": "image/png", ".webp": "image/webp",
+            ".gif": "image/gif"
+        }
+        mime = next((v for k, v in ext_mime.items() if name.endswith(k)), "image/jpeg")
         b64 = base64.standard_b64encode(content).decode()
-        return f"__IMAGE__{name}__BASE64__{b64}__MIMETYPE__{uploaded_file.type}"
+        return f"__IMAGE__{name}__BASE64__{b64}__MIMETYPE__{mime}"
     try:
         return content.decode("utf-8")
     except Exception:
@@ -603,6 +610,13 @@ def build_user_content(file_data, candidate_name, company_standard):
                 parts = content.split("__")
                 b64_data = parts[4]
                 mime_type = parts[6] if len(parts) > 6 else "image/jpeg"
+                # MIME 타입 유효성 검사
+                valid_mimes = ["image/jpeg", "image/png", "image/webp", "image/gif"]
+                if mime_type not in valid_mimes:
+                    mime_type = "image/jpeg"
+                # base64 유효성 간단 체크
+                if len(b64_data) < 10:
+                    continue
                 user_content.append({"type": "image", "source": {"type": "base64", "media_type": mime_type, "data": b64_data}})
                 user_content.append({"type": "text", "text": f"위 이미지는 [{label}] 자료입니다."})
             except Exception:
@@ -814,10 +828,55 @@ def dim_icon(k):
             "proactiveness":"🔥","leadership":"👑"}.get(k,"◈")
 
 
-# ─── 아카이브 함수 ────────────────────────────────────────────────────────────
+# ─── 아카이브 함수 (Supabase 영구 저장 + 로컬 폴백) ─────────────────────────
 ARCHIVE_FILE = "archive.json"
+SUPABASE_TABLE = "talent_archive"
+
+def _get_supabase():
+    """Supabase 연결 정보 반환. 설정 안 됐으면 None."""
+    try:
+        url = st.secrets.get("SUPABASE_URL", "")
+        key = st.secrets.get("SUPABASE_KEY", "")
+        if url and key:
+            return url.rstrip("/"), key
+    except Exception:
+        pass
+    return None, None
+
+def _sb_headers(key):
+    return {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+        "Prefer": "return=representation"
+    }
 
 def load_archive() -> list:
+    """Supabase → 로컬 파일 순으로 시도"""
+    import requests as req
+    url, key = _get_supabase()
+    if url and key:
+        try:
+            r = req.get(
+                f"{url}/rest/v1/{SUPABASE_TABLE}?order=created_at.desc&limit=200",
+                headers=_sb_headers(key), timeout=5
+            )
+            if r.status_code == 200:
+                rows = r.json()
+                return [
+                    {
+                        "id":             row.get("id"),
+                        "saved_at":       row.get("saved_at", ""),
+                        "candidate_name": row.get("candidate_name", ""),
+                        "dept":           row.get("dept", ""),
+                        "result":         json.loads(row.get("result_json", "{}"))
+                    }
+                    for row in rows
+                ]
+        except Exception:
+            pass
+
+    # 로컬 폴백
     try:
         if Path(ARCHIVE_FILE).exists():
             with open(ARCHIVE_FILE, "r", encoding="utf-8") as f:
@@ -827,12 +886,48 @@ def load_archive() -> list:
     return []
 
 def save_to_archive(record: dict):
+    """Supabase → 로컬 파일 순으로 저장"""
+    import requests as req
+    url, key = _get_supabase()
+    if url and key:
+        try:
+            payload = {
+                "saved_at":       record.get("saved_at", ""),
+                "candidate_name": record.get("candidate_name", ""),
+                "dept":           record.get("dept", ""),
+                "result_json":    json.dumps(record.get("result", {}), ensure_ascii=False)
+            }
+            r = req.post(
+                f"{url}/rest/v1/{SUPABASE_TABLE}",
+                headers=_sb_headers(key),
+                json=payload, timeout=5
+            )
+            if r.status_code in (200, 201):
+                return  # Supabase 저장 성공
+        except Exception:
+            pass
+
+    # 로컬 폴백
     archive = load_archive()
-    archive.insert(0, record)   # 최신순
+    archive.insert(0, record)
     with open(ARCHIVE_FILE, "w", encoding="utf-8") as f:
         json.dump(archive, f, ensure_ascii=False, indent=2)
 
-def delete_from_archive(idx: int):
+def delete_from_archive(record_id, idx: int):
+    """Supabase row id로 삭제 → 없으면 로컬 인덱스 삭제"""
+    import requests as req
+    url, key = _get_supabase()
+    if url and key and record_id:
+        try:
+            req.delete(
+                f"{url}/rest/v1/{SUPABASE_TABLE}?id=eq.{record_id}",
+                headers=_sb_headers(key), timeout=5
+            )
+            return
+        except Exception:
+            pass
+
+    # 로컬 폴백
     archive = load_archive()
     if 0 <= idx < len(archive):
         archive.pop(idx)
@@ -1119,11 +1214,12 @@ with st.sidebar:
             name    = rec.get("candidate_name", "이름 없음")
             dept    = rec.get("dept", "")
             saved   = rec.get("saved_at", "")
+            rec_id  = rec.get("id", None)
             summary = rec.get("result", {}).get("candidate_summary", "")[:40]
             tags    = rec.get("result", {}).get("personality_tags", [])[:2]
 
             # 카드 클릭 = 해당 기록 조회
-            with st.expander(f"**{name}** · {saved[:10]}", expanded=False):
+            with st.expander(f"**{name}** · {saved}", expanded=False):
                 if dept:
                     st.caption(dept)
                 st.markdown(f'<p style="font-size:0.75rem;color:#7A7268;line-height:1.6;">{summary}...</p>',
@@ -1140,7 +1236,7 @@ with st.sidebar:
                         st.rerun()
                 with col_d:
                     if st.button("삭제", key=f"del_{i}", use_container_width=True):
-                        delete_from_archive(i)
+                        delete_from_archive(rec_id, i)
                         if st.session_state.get("archive_view") == i:
                             st.session_state["show_archive"] = False
                         st.rerun()
