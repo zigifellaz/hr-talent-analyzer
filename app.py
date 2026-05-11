@@ -588,8 +588,34 @@ def read_file_content(uploaded_file) -> str:
             ".gif": "image/gif"
         }
         mime = next((v for k, v in ext_mime.items() if name.endswith(k)), "image/jpeg")
+
+        # 이미지 자동 압축 (Claude API 권장: 1568px 이하)
+        try:
+            from PIL import Image as PILImage
+            img = PILImage.open(io.BytesIO(content))
+            # RGBA/P 모드 → RGB 변환 (JPEG 저장 필요)
+            if img.mode in ("RGBA", "P", "LA", "CMYK"):
+                img = img.convert("RGB")
+                mime = "image/jpeg"
+            # 최대 1568px 리사이즈
+            max_px = 1568
+            w, h = img.size
+            if w > max_px or h > max_px:
+                ratio = min(max_px / w, max_px / h)
+                img = img.resize((int(w * ratio), int(h * ratio)), PILImage.LANCZOS)
+            # 압축 저장
+            buf = io.BytesIO()
+            if mime == "image/jpeg":
+                img.save(buf, format="JPEG", quality=82, optimize=True)
+            else:
+                img = img.convert("RGB")
+                img.save(buf, format="JPEG", quality=82, optimize=True)
+                mime = "image/jpeg"
+            content = buf.getvalue()
+        except Exception:
+            pass  # 압축 실패 시 원본 그대로 사용
+
         b64 = base64.standard_b64encode(content).decode()
-        # JSON으로 직렬화 (base64 안의 __ 충돌 방지)
         return "__IMGOBJ__" + json.dumps({"mime": mime, "b64": b64})
     try:
         return content.decode("utf-8")
