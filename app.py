@@ -47,9 +47,9 @@ html, body, .stApp {
 
 /* ── 좌우 여백 ── */
 .block-container {
-    max-width: 960px !important;
-    padding-left: 6rem !important;
-    padding-right: 6rem !important;
+    max-width: 1500px !important;
+    padding-left: 3rem !important;
+    padding-right: 3rem !important;
     margin-left: auto !important;
     margin-right: auto !important;
 }
@@ -2085,68 +2085,47 @@ with tab_org:
         </div>
         """, unsafe_allow_html=True)
 
-        # 팝업(모달) 처리 — 선택된 인원
-        sel = st.session_state.get("org_selected")
-        if sel:
-            sel_status, sel_color, sel_R = get_person_status(sel, archive_by_name)
-            if sel_R:
-                # 분석 결과 있음 → 결과 표시
-                st.markdown(f"""
-                <div style="background:#EDE8E0;border:1px solid #D4CEC4;border-radius:8px;
-                            padding:0.8rem 1.2rem;margin-bottom:1rem;">
-                    <span style="font-size:0.8rem;color:#7A7268;">
-                        🗂 조직도에서 선택 &nbsp;·&nbsp;
-                        <b style="color:#1A1714;">{sel}</b>
-                    </span>
-                </div>
-                """, unsafe_allow_html=True)
-                if st.button("✕  닫기", key="org_close"):
-                    st.session_state["org_selected"] = None
-                    st.rerun()
-                render_result(sel_R, sel)
-                if st.button("✕  조직도로 돌아가기", key="org_close2", use_container_width=True):
-                    st.session_state["org_selected"] = None
-                    st.rerun()
-            else:
-                # 분석 결과 없음 → 안내 + 이동 여부
-                st.markdown(f"""
-                <div style="background:#FBF3E0;border:2px solid #E0A800;border-radius:10px;
-                            padding:1.5rem 2rem;margin-bottom:1.2rem;text-align:center;">
-                    <div style="font-size:1.1rem;font-weight:700;color:#8B6914;margin-bottom:0.5rem;">
-                        📭 분석 결과가 없습니다
-                    </div>
-                    <div style="font-size:0.85rem;color:#7A7268;">
-                        <b>{sel}</b> 님의 분석 데이터가 아직 등록되지 않았습니다.<br>
-                        지금 분석을 진행하시겠습니까?
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-                mc1, mc2 = st.columns(2)
-                with mc1:
-                    if st.button("✅  분석하러 가기 (개인 분석 탭)", key="org_goto", use_container_width=True):
-                        st.session_state["org_prefill_name"] = sel
-                        st.session_state["org_selected"] = None
-                        st.info("상단 '👤 개인 분석' 탭을 클릭해주세요. 성명이 자동 입력되어 있습니다.")
-                with mc2:
-                    if st.button("✕  취소", key="org_cancel", use_container_width=True):
-                        st.session_state["org_selected"] = None
-                        st.rerun()
-
         st.markdown('<div class="hr"></div>', unsafe_allow_html=True)
 
-        # ── 인터랙티브 조직도 (줌/팬 가능) ──
+        # ── 인터랙티브 조직도 (줌/팬 + 인앱 모달) ──
         st.markdown("""
-        <p style="font-size:0.75rem;color:#7A7268;margin-bottom:0.5rem;">
-        💡 <b>Ctrl + 마우스 휠</b> 로 확대/축소 &nbsp;·&nbsp; <b>드래그</b> 로 이동 &nbsp;·&nbsp; <b>인원 카드 클릭</b> 시 아래 선택창에 반영
+        <p style="font-size:0.78rem;color:#7A7268;margin-bottom:0.5rem;">
+        💡 <b>Ctrl + 마우스 휠</b> 확대/축소 &nbsp;·&nbsp; <b>드래그</b> 이동 &nbsp;·&nbsp; <b>인원 카드 클릭</b> 시 분석 결과 즉시 표시 (새로고침 없음)
         </p>
         """, unsafe_allow_html=True)
 
-        # 조직도 HTML 빌드
-        def status_dot_color(name):
-            s, c, _ = get_person_status(name, archive_by_name)
-            return s, c
+        # 각 인원의 분석 요약 데이터를 JS로 전달 (클릭 시 모달용)
+        person_data = {}
+        for div in org_data.values():
+            for team in div.values():
+                for people in team.values():
+                    for p in people:
+                        nm = p["name"]
+                        s, c, R = get_person_status(nm, archive_by_name)
+                        if R:
+                            dims = R.get("dimensions", {})
+                            person_data[nm] = {
+                                "has": True,
+                                "summary": R.get("candidate_summary", ""),
+                                "verdict": R.get("rebalancing_verdict", {}).get("decision", "-"),
+                                "confidence": R.get("rebalancing_verdict", {}).get("confidence", "-"),
+                                "rationale": R.get("rebalancing_verdict", {}).get("rationale", ""),
+                                "org_fit": R.get("org_fit", {}).get("score", "-"),
+                                "leadership": R.get("leadership_readiness", {}).get("score", "-"),
+                                "lead_rec": R.get("leadership_readiness", {}).get("recommendation", ""),
+                                "cog": dims.get("cognitive_ability", {}).get("score", "-"),
+                                "job": dims.get("job_expertise", {}).get("score", "-"),
+                                "pro": dims.get("proactiveness", {}).get("score", "-"),
+                                "lead": dims.get("leadership", {}).get("score", "-"),
+                                "burnout": R.get("burnout_risk", {}).get("level", "-"),
+                                "turnover": R.get("turnover_risk", {}).get("level", "-"),
+                                "tags": R.get("personality_tags", [])[:5],
+                                "insight": R.get("overall_insight", ""),
+                            }
+                        else:
+                            person_data[nm] = {"has": False}
 
-        # 각 본부 컬럼 HTML 생성
+        # 본부 컬럼 HTML
         div_blocks = []
         for div_name, teams in org_data.items():
             team_blocks = []
@@ -2158,24 +2137,24 @@ with tab_org:
                     cards = []
                     for person in people:
                         pname = person["name"]
-                        s, c = status_dot_color(pname)
+                        s, c, _ = get_person_status(pname, archive_by_name)
                         is_none = (s == "none")
-                        card_bg = "#E8E4DC" if is_none else "#FFFFFF"
+                        card_bg = "#ECE8E0" if is_none else "#FFFFFF"
                         card_border = "#D8D2C8" if is_none else "#D4CEC4"
                         name_color = "#9A9286" if is_none else "#1A1714"
                         dot = "" if is_none else f'<span class="dot" style="background:{c};box-shadow:0 0 5px {c};"></span>'
-                        role = person.get("role","")
+                        role = person.get("role", "")
                         role_txt = f" · {role}" if role and role != "팀원" else ""
                         cards.append(
                             f'<div class="pcard" style="background:{card_bg};border-color:{card_border};" '
-                            f'onclick="pick(\'{pname}\')">'
+                            f'onclick="showModal(\'{pname}\')">'
                             f'<div class="pname" style="color:{name_color};">{pname}{dot}</div>'
                             f'<div class="ppos">{person["pos"]}{role_txt}</div>'
                             f'</div>'
                         )
                     part_html = ""
                     if part_label:
-                        part_html += f'<div class="partlabel">{part_label}</div>'
+                        part_html += f'<div class="partlabel">└ {part_label}</div>'
                     part_html += f'<div class="cards">{"".join(cards)}</div>'
                     part_blocks.append(f'<div class="part">{part_html}</div>')
 
@@ -2191,118 +2170,173 @@ with tab_org:
             )
 
         org_html = "".join(div_blocks)
+        pdata_json = json.dumps(person_data, ensure_ascii=False)
 
-        org_chart_html = f"""
-        <!DOCTYPE html><html><head><meta charset="utf-8"><style>
-        * {{ box-sizing:border-box; margin:0; padding:0; }}
-        body {{ font-family:'Noto Sans KR',-apple-system,sans-serif; background:#F7F3ED; overflow:hidden; }}
-        #viewport {{ width:100%; height:760px; overflow:hidden; position:relative;
-                     background:#F2EDE5; border:1px solid #D4CEC4; border-radius:10px; cursor:grab; }}
-        #viewport.grabbing {{ cursor:grabbing; }}
-        #canvas {{ transform-origin:0 0; padding:30px; display:inline-block; transition:transform 0.05s; }}
-        .org-root {{ display:flex; gap:24px; align-items:flex-start; }}
-        .div {{ background:#FFFFFF; border:1.5px solid #C9C1B4; border-radius:12px; padding:14px;
-                min-width:240px; box-shadow:0 2px 10px rgba(0,0,0,0.04); }}
-        .divlabel {{ font-size:14px; font-weight:800; color:#1A1714; text-align:center;
-                     padding:8px; background:#1A1714; color:#F7F3ED; border-radius:7px; margin-bottom:12px;
-                     letter-spacing:1px; }}
-        .teams {{ display:flex; flex-direction:column; gap:14px; }}
-        .team {{ border-left:3px solid #B8924A; padding-left:10px; }}
-        .teamlabel {{ font-size:12px; font-weight:700; color:#2B3D5C; margin-bottom:6px; }}
-        .parts {{ display:flex; flex-direction:column; gap:8px; }}
-        .partlabel {{ font-size:10px; color:#8A8278; margin:3px 0; padding-left:2px; }}
-        .cards {{ display:flex; flex-wrap:wrap; gap:6px; }}
-        .pcard {{ border:1px solid #D4CEC4; border-radius:7px; padding:7px 10px; cursor:pointer;
-                  min-width:88px; transition:all 0.15s; }}
-        .pcard:hover {{ border-color:#B8924A; box-shadow:0 3px 10px rgba(184,146,74,0.2);
-                        transform:translateY(-1px); }}
-        .pname {{ font-size:12px; font-weight:600; display:flex; align-items:center; gap:4px; }}
-        .ppos {{ font-size:9.5px; color:#B0A898; margin-top:1px; }}
-        .dot {{ display:inline-block; width:7px; height:7px; border-radius:50%; }}
-        #controls {{ position:absolute; bottom:14px; right:14px; display:flex; gap:6px; z-index:10; }}
-        #controls button {{ width:34px; height:34px; border:1px solid #D4CEC4; background:#FFFFFF;
-                            border-radius:7px; font-size:16px; cursor:pointer; color:#3D3830;
-                            box-shadow:0 2px 6px rgba(0,0,0,0.08); }}
-        #controls button:hover {{ background:#EDE8E0; }}
-        #zoomlabel {{ position:absolute; bottom:14px; left:14px; background:#FFFFFF;
-                      border:1px solid #D4CEC4; border-radius:7px; padding:5px 12px;
-                      font-size:11px; color:#7A7268; z-index:10; }}
+        org_chart_html = """
+        <!DOCTYPE html><html><head><meta charset="utf-8">
+        <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+        <style>
+        * { box-sizing:border-box; margin:0; padding:0; }
+        body { font-family:'Noto Sans KR',sans-serif; background:#F7F3ED; overflow:hidden; }
+        #viewport { width:100%; height:840px; overflow:hidden; position:relative;
+                    background:#F2EDE5; border:1px solid #D4CEC4; border-radius:12px; cursor:grab; }
+        #viewport.grabbing { cursor:grabbing; }
+        #canvas { transform-origin:0 0; padding:36px; display:inline-block; }
+        .org-root { display:flex; gap:28px; align-items:flex-start; }
+        .div { background:#FFFFFF; border:1.5px solid #C9C1B4; border-radius:14px; padding:16px;
+               min-width:250px; box-shadow:0 3px 14px rgba(0,0,0,0.05); }
+        .divlabel { font-size:15px; font-weight:800; text-align:center; padding:10px;
+                    background:#1A1714; color:#F7F3ED; border-radius:8px; margin-bottom:14px; letter-spacing:1.5px; }
+        .teams { display:flex; flex-direction:column; gap:16px; }
+        .team { border-left:3px solid #B8924A; padding-left:12px; }
+        .teamlabel { font-size:13px; font-weight:700; color:#2B3D5C; margin-bottom:7px; }
+        .parts { display:flex; flex-direction:column; gap:9px; }
+        .partlabel { font-size:11px; color:#8A8278; margin:4px 0 2px; }
+        .cards { display:flex; flex-wrap:wrap; gap:7px; }
+        .pcard { border:1px solid #D4CEC4; border-radius:8px; padding:8px 11px; cursor:pointer;
+                 min-width:92px; transition:all 0.15s; }
+        .pcard:hover { border-color:#B8924A; box-shadow:0 4px 12px rgba(184,146,74,0.22); transform:translateY(-2px); }
+        .pname { font-size:13px; font-weight:600; display:flex; align-items:center; gap:5px; }
+        .ppos { font-size:10px; color:#B0A898; margin-top:2px; }
+        .dot { display:inline-block; width:8px; height:8px; border-radius:50%; }
+        #controls { position:absolute; bottom:16px; right:16px; display:flex; gap:7px; z-index:10; }
+        #controls button { width:38px; height:38px; border:1px solid #D4CEC4; background:#FFFFFF;
+                           border-radius:8px; font-size:18px; cursor:pointer; color:#3D3830;
+                           box-shadow:0 2px 7px rgba(0,0,0,0.1); }
+        #controls button:hover { background:#EDE8E0; }
+        #zoomlabel { position:absolute; bottom:16px; left:16px; background:#FFFFFF;
+                     border:1px solid #D4CEC4; border-radius:8px; padding:6px 14px;
+                     font-size:12px; color:#7A7268; z-index:10; }
+        /* 모달 */
+        #overlay { display:none; position:fixed; inset:0; background:rgba(26,23,20,0.55);
+                   z-index:100; align-items:center; justify-content:center; }
+        #modal { background:#F7F3ED; width:min(720px,92%); max-height:88%; overflow-y:auto;
+                 border-radius:14px; padding:0; box-shadow:0 20px 60px rgba(0,0,0,0.3); }
+        .m-head { padding:1.6rem 2rem 1.2rem; border-bottom:1px solid #E2DDD4; position:relative; }
+        .m-name { font-size:1.6rem; font-weight:800; color:#1A1714; }
+        .m-summary { font-size:0.9rem; color:#7A7268; margin-top:0.4rem; line-height:1.6; }
+        .m-close { position:absolute; top:1.3rem; right:1.5rem; cursor:pointer; font-size:1.3rem;
+                   color:#B0A898; border:none; background:none; }
+        .m-close:hover { color:#1A1714; }
+        .m-body { padding:1.5rem 2rem 2rem; }
+        .m-verdict { display:flex; align-items:center; justify-content:space-between;
+                     border-radius:10px; padding:1rem 1.4rem; margin-bottom:1.2rem; }
+        .m-tags { margin:0.3rem 0 0; }
+        .m-tag { display:inline-block; border:1px solid #D4AF72; color:#B8924A; border-radius:4px;
+                 padding:2px 9px; font-size:0.72rem; margin:2px; }
+        .m-grid { display:grid; grid-template-columns:1fr 1fr; gap:0.7rem; margin-bottom:1.2rem; }
+        .m-metric { background:#FFFFFF; border:1px solid #D4CEC4; border-radius:8px; padding:0.9rem 1.1rem; }
+        .m-metric .lbl { font-size:0.62rem; letter-spacing:1px; text-transform:uppercase; color:#B0A898; }
+        .m-metric .vl { font-size:1.5rem; font-weight:800; font-family:'Noto Sans KR'; }
+        .m-row { display:flex; gap:0.5rem; margin-bottom:1.2rem; }
+        .m-chip { flex:1; background:#FFFFFF; border:1px solid #D4CEC4; border-radius:8px;
+                  padding:0.7rem; text-align:center; }
+        .m-chip .lbl { font-size:0.6rem; color:#B0A898; text-transform:uppercase; }
+        .m-chip .vl { font-size:0.95rem; font-weight:700; margin-top:0.2rem; }
+        .m-sec { background:#FFFFFF; border:1px solid #D4CEC4; border-radius:8px; padding:1rem 1.3rem;
+                 margin-bottom:0.9rem; }
+        .m-sec .h { font-size:0.65rem; font-weight:700; letter-spacing:1.5px; text-transform:uppercase;
+                    color:#B8924A; margin-bottom:0.5rem; }
+        .m-sec .t { font-size:0.85rem; color:#3D3830; line-height:1.75; }
+        .m-empty { text-align:center; padding:2.5rem 1rem; }
+        .m-empty .ic { font-size:2.5rem; }
+        .m-empty .ttl { font-size:1.1rem; font-weight:700; color:#8B6914; margin:0.8rem 0 0.4rem; }
+        .m-empty .ds { font-size:0.85rem; color:#7A7268; line-height:1.6; }
         </style></head><body>
         <div id="viewport">
-            <div id="canvas"><div class="org-root">{org_html}</div></div>
-            <div id="zoomlabel">100%</div>
+            <div id="canvas"><div class="org-root">__ORG_HTML__</div></div>
+            <div id="zoomlabel">85%</div>
             <div id="controls">
                 <button onclick="zoomBtn(0.1)">+</button>
                 <button onclick="zoomBtn(-0.1)">−</button>
                 <button onclick="resetView()">⊙</button>
             </div>
         </div>
+        <div id="overlay" onclick="if(event.target===this)closeModal()">
+            <div id="modal"></div>
+        </div>
         <script>
+        const PDATA = __PDATA__;
         let scale=0.85, tx=0, ty=0, panning=false, sx=0, sy=0;
         const vp=document.getElementById('viewport');
         const cv=document.getElementById('canvas');
         const zl=document.getElementById('zoomlabel');
-        function apply(){{ cv.style.transform=`translate(${{tx}}px,${{ty}}px) scale(${{scale}})`;
-                           zl.textContent=Math.round(scale*100)+'%'; }}
-        function zoomBtn(d){{ scale=Math.min(2.5,Math.max(0.25,scale+d)); apply(); }}
-        function resetView(){{ scale=0.85; tx=0; ty=0; apply(); }}
-        vp.addEventListener('wheel',function(e){{
-            if(e.ctrlKey){{ e.preventDefault();
+        function apply(){ cv.style.transform='translate('+tx+'px,'+ty+'px) scale('+scale+')';
+                          zl.textContent=Math.round(scale*100)+'%'; }
+        function zoomBtn(d){ scale=Math.min(2.5,Math.max(0.25,scale+d)); apply(); }
+        function resetView(){ scale=0.85; tx=0; ty=0; apply(); }
+        vp.addEventListener('wheel',function(e){
+            if(e.ctrlKey){ e.preventDefault();
                 const r=vp.getBoundingClientRect();
-                const mx=e.clientX-r.left, my=e.clientY-r.top;
-                const before=scale;
+                const mx=e.clientX-r.left, my=e.clientY-r.top, before=scale;
                 scale=Math.min(2.5,Math.max(0.25,scale - e.deltaY*0.0015));
-                tx=mx-(mx-tx)*(scale/before);
-                ty=my-(my-ty)*(scale/before);
-                apply();
-            }}
-        }},{{passive:false}});
-        vp.addEventListener('mousedown',function(e){{
+                tx=mx-(mx-tx)*(scale/before); ty=my-(my-ty)*(scale/before); apply();
+            }
+        },{passive:false});
+        vp.addEventListener('mousedown',function(e){
             if(e.target.closest('.pcard'))return;
             panning=true; sx=e.clientX-tx; sy=e.clientY-ty; vp.classList.add('grabbing');
-        }});
-        window.addEventListener('mousemove',function(e){{
-            if(panning){{ tx=e.clientX-sx; ty=e.clientY-sy; apply(); }}
-        }});
-        window.addEventListener('mouseup',function(){{ panning=false; vp.classList.remove('grabbing'); }});
-        function pick(name){{
-            const url=new URL(window.parent.location);
-            url.searchParams.set('person',name);
-            window.parent.history.pushState({{}},'',url);
-            window.parent.location.reload();
-        }}
+        });
+        window.addEventListener('mousemove',function(e){ if(panning){ tx=e.clientX-sx; ty=e.clientY-sy; apply(); }});
+        window.addEventListener('mouseup',function(){ panning=false; vp.classList.remove('grabbing'); });
+
+        const V_STYLE = {
+            "KEEP":   ["#2D6A4F","#EAF4EE","✓ KEEP — 핵심 인재, 유지 권장"],
+            "DEVELOP":["#2B3D5C","#E8EEF5","↗ DEVELOP — 육성 대상"],
+            "WATCH":  ["#8B6914","#FBF3E0","◷ WATCH — 관찰 필요"],
+            "MISFIT": ["#8B2635","#FAEAEC","✕ MISFIT — 조직 방향성 부적합"]
+        };
+        const RISK = {"LOW":"🟢 낮음","MEDIUM":"🟡 주의","HIGH":"🔴 높음","CRITICAL":"🔴 심각"};
+        function showModal(name){
+            const d=PDATA[name]; const m=document.getElementById('modal');
+            if(!d || !d.has){
+                m.innerHTML='<div class="m-head"><button class="m-close" onclick="closeModal()">✕</button>'
+                  +'<div class="m-name">'+name+'</div></div>'
+                  +'<div class="m-body"><div class="m-empty"><div class="ic">📭</div>'
+                  +'<div class="ttl">분석 결과가 없습니다</div>'
+                  +'<div class="ds">'+name+' 님의 분석 데이터가 아직 등록되지 않았습니다.<br>'
+                  +'개인 분석 탭에서 분석을 진행해주세요.</div></div></div>';
+            } else {
+                const vs=V_STYLE[d.verdict]||["#7A7268","#EDE8E0",d.verdict];
+                let tags=d.tags.map(t=>'<span class="m-tag">'+t+'</span>').join('');
+                m.innerHTML='<div class="m-head"><button class="m-close" onclick="closeModal()">✕</button>'
+                  +'<div class="m-name">'+name+'</div>'
+                  +'<div class="m-summary">'+(d.summary||'')+'</div>'
+                  +'<div class="m-tags">'+tags+'</div></div>'
+                  +'<div class="m-body">'
+                  +'<div class="m-verdict" style="background:'+vs[1]+';border:2px solid '+vs[0]+';">'
+                  +'<div><div style="font-size:0.6rem;letter-spacing:2px;text-transform:uppercase;color:'+vs[0]+';">Rebalancing Verdict</div>'
+                  +'<div style="font-size:1.05rem;font-weight:800;color:'+vs[0]+';">'+vs[2]+'</div></div>'
+                  +'<div style="text-align:right;"><div style="font-size:0.6rem;color:#7A7268;">신뢰도</div>'
+                  +'<div style="font-weight:700;color:'+vs[0]+';">'+d.confidence+'</div></div></div>'
+                  +'<div class="m-grid">'
+                  +'<div class="m-metric"><div class="lbl">조직 적합도</div><div class="vl" style="color:'+(d.org_fit>=70?'#2D6A4F':d.org_fit>=50?'#8B6914':'#8B2635')+';">'+d.org_fit+'<span style="font-size:0.7rem;color:#B0A898;">/100</span></div></div>'
+                  +'<div class="m-metric"><div class="lbl">리더십 준비도</div><div class="vl" style="color:'+(d.leadership>=80?'#2D6A4F':d.leadership>=60?'#2B3D5C':'#8B2635')+';">'+d.leadership+'<span style="font-size:0.7rem;color:#B0A898;">/100</span></div></div>'
+                  +'</div>'
+                  +'<div class="m-row">'
+                  +'<div class="m-chip"><div class="lbl">인지</div><div class="vl">'+d.cog+'</div></div>'
+                  +'<div class="m-chip"><div class="lbl">전문성</div><div class="vl">'+d.job+'</div></div>'
+                  +'<div class="m-chip"><div class="lbl">적극성</div><div class="vl">'+d.pro+'</div></div>'
+                  +'<div class="m-chip"><div class="lbl">리더십</div><div class="vl">'+d.lead+'</div></div>'
+                  +'</div>'
+                  +'<div class="m-row">'
+                  +'<div class="m-chip"><div class="lbl">번아웃</div><div class="vl">'+(RISK[d.burnout]||d.burnout)+'</div></div>'
+                  +'<div class="m-chip"><div class="lbl">이직 위험</div><div class="vl">'+(RISK[d.turnover]||d.turnover)+'</div></div>'
+                  +'</div>'
+                  +'<div class="m-sec"><div class="h">리밸런싱 판단 근거</div><div class="t">'+(d.rationale||'')+'</div></div>'
+                  +'<div class="m-sec"><div class="h">리더 부여 결론</div><div class="t">'+(d.lead_rec||'')+'</div></div>'
+                  +'<div class="m-sec"><div class="h">종합 인사이트</div><div class="t">'+(d.insight||'')+'</div></div>'
+                  +'</div>';
+            }
+            document.getElementById('overlay').style.display='flex';
+        }
+        function closeModal(){ document.getElementById('overlay').style.display='none'; }
         apply();
         </script>
         </body></html>
         """
-        components.html(org_chart_html, height=790, scrolling=False)
-
-        # 클릭 신호 처리 (쿼리 파라미터)
-        try:
-            picked = st.query_params.get("person")
-        except Exception:
-            picked = None
-        if picked and picked != st.session_state.get("org_selected"):
-            st.session_state["org_selected"] = picked
-            try:
-                st.query_params.clear()
-            except Exception:
-                pass
-            st.rerun()
-
-        # 수동 선택 백업 (쿼리파라미터 미작동 환경 대비)
-        st.markdown('<div style="height:1rem;"></div>', unsafe_allow_html=True)
-        all_names = sorted({p["name"] for div in org_data.values()
-                            for team in div.values() for people in team.values() for p in people})
-        msel1, msel2 = st.columns([3,1])
-        with msel1:
-            manual = st.selectbox("또는 직접 선택", ["— 선택 —"] + all_names, key="org_manual_sel")
-        with msel2:
-            st.markdown('<div style="height:1.7rem;"></div>', unsafe_allow_html=True)
-            if st.button("조회", use_container_width=True, key="org_manual_btn"):
-                if manual != "— 선택 —":
-                    st.session_state["org_selected"] = manual
-                    st.rerun()
+        org_chart_html = org_chart_html.replace("__ORG_HTML__", org_html).replace("__PDATA__", pdata_json)
+        components.html(org_chart_html, height=870, scrolling=False)
 
 
 # ── Footer ──
