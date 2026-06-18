@@ -1301,220 +1301,360 @@ except Exception:
     st.error("⚠️ 서버 설정 오류입니다. 관리자에게 문의해주세요.")
     st.stop()
 
-# ── Section 2: Candidate Info ──
-st.markdown("""
-<div class="section-header">
-    <span class="section-num">01</span>
-    <span class="section-title">대상자 기본 정보</span>
-    <div class="section-rule"></div>
-</div>
-""", unsafe_allow_html=True)
-
-c1, c2 = st.columns(2)
-with c1:
-    candidate_name = st.text_input("성명", placeholder="홍길동")
-with c2:
-    candidate_dept = st.text_input("소속 부서", placeholder="Sales & Marketing Division")
-
-company_standard = st.text_area(
-    "회사 인재상",
-    value="""1) 성장지향: 목표 의식이 뚜렷하며, 조직과 개인의 동반 성장을 위해 노력하는 분
+# 공통 인재상 (두 탭에서 공유)
+company_standard = """1) 성장지향: 목표 의식이 뚜렷하며, 조직과 개인의 동반 성장을 위해 노력하는 분
 2) 상호존중: 동료 간의 상호 존중과 팀워크의 가치를 소중히 여기는 분
-3) 혁신과 도전: 지속적인 학습과 도전을 통해 끊임없이 혁신을 추구하는 분""",
-    height=110
-)
+3) 혁신과 도전: 지속적인 학습과 도전을 통해 끊임없이 혁신을 추구하는 분"""
 
-core_culture = st.text_area(
-    "회사 5대 핵심문화 축",
-    value="""1) 개방적 소통 탁월성 (Open communication excellence)
+core_culture = """1) 개방적 소통 탁월성 (Open communication excellence)
 2) 몰입 기반 실행력 (Commitment-driven execution)
 3) 성과 기반 인정 체계 (Performance-based recognition)
 4) 협업 시너지 (Collaborative synergy)
-5) 혁신 리더십 (Innovation leadership)""",
-    height=140
-)
+5) 혁신 리더십 (Innovation leadership)"""
 
-# ── Section 2: Upload ──
-st.markdown("""
-<div class="section-header">
-    <span class="section-num">02</span>
-    <span class="section-title">자료 업로드</span>
-    <div class="section-rule"></div>
-</div>
-""", unsafe_allow_html=True)
+# ── 탭 ──
+tab_single, tab_bulk = st.tabs(["👤  개인 분석", "👥  대량 분석"])
 
-st.markdown("""
-<div style="background:white;border:1px solid #D4CEC4;border-radius:8px;padding:1.2rem 1.5rem;margin-bottom:1rem;">
-    <p style="font-size:0.8rem;font-weight:600;color:#1A1714;margin-bottom:0.6rem;">📎 아래 자료를 한꺼번에 선택해서 업로드하세요</p>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.3rem 2rem;">
-        <div style="font-size:0.75rem;color:#7A7268;">✦ 이력서 / 자기소개서</div>
-        <div style="font-size:0.75rem;color:#7A7268;">✦ 다면평가 결과</div>
-        <div style="font-size:0.75rem;color:#7A7268;">✦ 대상자 작성 기안서</div>
-        <div style="font-size:0.75rem;color:#7A7268;">✦ MBTI 결과 (스크린샷 가능)</div>
-        <div style="font-size:0.75rem;color:#7A7268;">✦ 인적성 검사 결과표</div>
-        <div style="font-size:0.75rem;color:#7A7268;">✦ SNS / 포트폴리오</div>
-        <div style="font-size:0.75rem;color:#7A7268;">✦ 소속 부서 자료</div>
-        <div style="font-size:0.75rem;color:#7A7268;">✦ 회사 인재상 파일</div>
+
+# ════════════════════════════════════════════════════════
+#  TAB 1 — 개인 분석 (기존 기능)
+# ════════════════════════════════════════════════════════
+with tab_single:
+    # ── 대상자 기본 정보 ──
+    st.markdown("""
+    <div class="section-header">
+        <span class="section-num">01</span>
+        <span class="section-title">대상자 기본 정보</span>
+        <div class="section-rule"></div>
     </div>
-    <p style="font-size:0.7rem;color:#B0A898;margin-top:0.8rem;margin-bottom:0;">
-        PDF · DOCX · JPG · PNG · TXT 지원 &nbsp;|&nbsp; 없는 자료는 건너뛰어도 됩니다
-    </p>
-</div>
-""", unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
+    c1, c2 = st.columns(2)
+    with c1:
+        candidate_name = st.text_input("성명", placeholder="홍길동", key="s_name")
+    with c2:
+        candidate_dept = st.text_input("소속 부서", placeholder="Sales & Marketing Division", key="s_dept")
+    company_standard_s = st.text_area("회사 인재상", value=company_standard, height=110, key="s_std")
+    core_culture_s     = st.text_area("회사 5대 핵심문화 축", value=core_culture, height=140, key="s_culture")
 
-uploaded_files = st.file_uploader(
-    "파일을 여기에 끌어다 놓거나 클릭해서 선택하세요 (여러 파일 동시 선택 가능)",
-    type=["pdf","docx","jpg","jpeg","png","webp","txt","md"],
-    accept_multiple_files=True,
-    label_visibility="visible"
-)
-
-file_data = {}
-if uploaded_files:
-    st.markdown(f'<p style="font-size:0.78rem;color:#2D6A4F;margin:0.5rem 0;">✅ {len(uploaded_files)}개 파일 업로드 완료</p>', unsafe_allow_html=True)
-    for uploaded in uploaded_files:
-        content = read_file_content(uploaded)
-        file_data[uploaded.name] = content
-
-if candidate_dept:
-    file_data["소속 부서"] = candidate_dept
-if company_standard:
-    file_data["회사 인재상"] = company_standard
-if core_culture:
-    file_data["회사 5대 핵심문화 축"] = core_culture
-
-# ── Section 3: 분석 결과 안내 ──
-st.markdown("""
-<div class="section-header">
-    <span class="section-num">03</span>
-    <span class="section-title">분석 결과 안내</span>
-    <div class="section-rule"></div>
-</div>
-""", unsafe_allow_html=True)
-
-guide_items = [
-    ("#B8924A", "01 · 대상자 프로필",       "종합 한줄 평가와 함께 대상자의 핵심 성향을 태그로 요약해드립니다."),
-    ("#2B3D5C", "02 · 4개 역량 차원 분석",  "인지능력 · 잡 전문성 · 적극성 · 리더십을 100점 만점으로 점수화하고 근거를 제시합니다."),
-    ("#B8924A", "03 · 채용 키워드 TOP 3",   "STAR 행동사건 면접법 기반의 구체적 질문과 평가 포인트를 순위별로 제공합니다."),
-    ("#8B2635", "04 · Derailer 위험 요인",  "Hogan Assessment 기반으로 스트레스 상황에서 나타날 수 있는 부정적 행동 패턴을 사전 식별합니다."),
-    ("#2D6A4F", "05 · 성과 극대화 조건",    "이 인재가 최고 성과를 낼 수 있는 환경·관리 방식·개발 과제를 제시합니다."),
-    ("#2B3D5C", "06 · 종합 채용 권고",      "McKinsey·Korn Ferry 수준의 임원 평가 리포트 언어로 최종 채용 의사결정을 위한 권고를 제공합니다."),
-]
-
-g_col1, g_col2 = st.columns(2)
-for i, (color, title, desc) in enumerate(guide_items):
-    with (g_col1 if i % 2 == 0 else g_col2):
-        st.markdown(f"""
-        <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;
-                    padding:1.2rem 1.4rem;border-left:3px solid {color};margin-bottom:0.8rem;">
-            <div style="font-size:0.7rem;font-weight:700;letter-spacing:2px;
-                        text-transform:uppercase;color:{color};margin-bottom:0.5rem;">{title}</div>
-            <div style="font-size:0.82rem;color:#3D3830;line-height:1.7;">{desc}</div>
+    # ── 파일 업로드 ──
+    st.markdown("""
+    <div class="section-header">
+        <span class="section-num">02</span>
+        <span class="section-title">자료 업로드</span>
+        <div class="section-rule"></div>
+    </div>
+    """, unsafe_allow_html=True)
+    st.markdown("""
+    <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;padding:1.2rem 1.5rem;margin-bottom:1rem;">
+        <p style="font-size:0.8rem;font-weight:600;color:#1A1714;margin-bottom:0.6rem;">📎 아래 자료를 한꺼번에 선택해서 업로드하세요</p>
+        <div style="display:flex;flex-wrap:wrap;gap:0.4rem 2rem;">
+            <span style="font-size:0.75rem;color:#7A7268;">✦ 이력서 / 자기소개서</span>
+            <span style="font-size:0.75rem;color:#7A7268;">✦ 다면평가 결과</span>
+            <span style="font-size:0.75rem;color:#7A7268;">✦ 대상자 작성 기안서</span>
+            <span style="font-size:0.75rem;color:#7A7268;">✦ MBTI 결과 (스크린샷 가능)</span>
+            <span style="font-size:0.75rem;color:#7A7268;">✦ 인적성 검사 결과표</span>
+            <span style="font-size:0.75rem;color:#7A7268;">✦ SNS / 포트폴리오</span>
         </div>
-        """, unsafe_allow_html=True)
+        <p style="font-size:0.7rem;color:#B0A898;margin-top:0.8rem;margin-bottom:0;">PDF · DOCX · JPG · PNG · TXT 지원</p>
+    </div>
+    """, unsafe_allow_html=True)
+    uploaded_files = st.file_uploader(
+        "파일을 여기에 끌어다 놓거나 클릭해서 선택하세요 (여러 파일 동시 선택 가능)",
+        type=["pdf","docx","jpg","jpeg","png","webp","txt","md"],
+        accept_multiple_files=True, label_visibility="visible", key="s_uploader"
+    )
+    file_data = {}
+    if uploaded_files:
+        st.markdown(f'<p style="font-size:0.78rem;color:#2D6A4F;margin:0.5rem 0;">✅ {len(uploaded_files)}개 파일 업로드 완료</p>', unsafe_allow_html=True)
+        for uf in uploaded_files:
+            file_data[uf.name] = read_file_content(uf)
+    if candidate_dept:        file_data["소속 부서"]            = candidate_dept
+    if company_standard_s:    file_data["회사 인재상"]           = company_standard_s
+    if core_culture_s:        file_data["회사 5대 핵심문화 축"]   = core_culture_s
 
-st.markdown('<p style="font-size:0.72rem;color:#B0A898;margin-bottom:0;">※ 업로드된 자료가 많을수록 분석 정확도가 높아집니다. 자료가 부족한 항목은 가용 정보를 바탕으로 추론합니다.</p>', unsafe_allow_html=True)
+    # ── 분석 결과 안내 ──
+    st.markdown("""
+    <div class="section-header">
+        <span class="section-num">03</span>
+        <span class="section-title">분석 결과 안내</span>
+        <div class="section-rule"></div>
+    </div>
+    """, unsafe_allow_html=True)
+    guide_items = [
+        ("#B8924A","01 · 대상자 프로필","종합 한줄 평가와 함께 핵심 성향을 태그로 요약합니다."),
+        ("#2B3D5C","02 · 4개 역량 차원","인지능력·잡 전문성·적극성·리더십을 100점 만점으로 점수화합니다."),
+        ("#B8924A","03 · 채용 키워드 TOP 3","STAR 기반 면접 질문과 평가 포인트를 순위별로 제공합니다."),
+        ("#8B2635","04 · Derailer 위험 요인","스트레스 상황에서 나타날 수 있는 부정적 행동 패턴을 식별합니다."),
+        ("#2D6A4F","05 · 성과 극대화 조건","최고 성과를 위한 환경·관리 방식·개발 과제를 제시합니다."),
+        ("#2B3D5C","06 · 종합 채용 권고","McKinsey·Korn Ferry 수준의 최종 채용 의사결정 권고를 제공합니다."),
+    ]
+    g1, g2 = st.columns(2)
+    for i, (color, title, desc) in enumerate(guide_items):
+        with (g1 if i % 2 == 0 else g2):
+            st.markdown(f"""
+            <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;
+                        padding:1rem 1.2rem;border-left:3px solid {color};margin-bottom:0.8rem;">
+                <div style="font-size:0.68rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;
+                            color:{color};margin-bottom:0.4rem;">{title}</div>
+                <div style="font-size:0.8rem;color:#3D3830;line-height:1.65;">{desc}</div>
+            </div>
+            """, unsafe_allow_html=True)
+    st.markdown('<p style="font-size:0.72rem;color:#B0A898;">※ 업로드된 자료가 많을수록 분석 정확도가 높아집니다.</p>', unsafe_allow_html=True)
+    st.markdown('<div class="hr"></div>', unsafe_allow_html=True)
 
-# ── Divider ──
-st.markdown('<div class="hr"></div>', unsafe_allow_html=True)
-
-# ── 아카이브 조회 모드 ──
-if st.session_state.get("show_archive"):
-    idx = st.session_state.get("archive_view", 0)
-    archive_data = load_archive()
-    if 0 <= idx < len(archive_data):
-        rec = archive_data[idx]
-        st.markdown(f"""
-        <div style="background:#EDE8E0;border:1px solid #D4CEC4;border-radius:8px;
-                    padding:0.8rem 1.2rem;margin-bottom:1.5rem;">
-            <span style="font-size:0.8rem;color:#7A7268;">
-                🗂 아카이브 조회 중 &nbsp;·&nbsp;
-                <b style="color:#1A1714;">{rec.get('candidate_name','')}</b> &nbsp;·&nbsp;
-                {rec.get('saved_at','')}
-            </span>
-        </div>
-        """, unsafe_allow_html=True)
-        render_result(rec["result"], rec.get("candidate_name",""))
-    if st.button("← 새 분석으로 돌아가기", use_container_width=True):
-        st.session_state["show_archive"] = False
-        st.rerun()
-
-else:
-    # ── 분석 완료 상태면 결과 + 새 분석 버튼 표시 ──
-    if st.session_state.get("analysis_done"):
-
-        # 새 분석 시작 버튼 (상단 고정)
-        st.markdown("""
-        <div style="background:#FBF8F3;border:1.5px solid #B8924A;border-radius:8px;
-                    padding:1rem 1.5rem;margin-bottom:1.2rem;display:flex;
-                    align-items:center;justify-content:space-between;">
-            <div>
+    # ── 아카이브 조회 모드 ──
+    if st.session_state.get("show_archive"):
+        idx = st.session_state.get("archive_view", 0)
+        archive_data = load_archive()
+        if 0 <= idx < len(archive_data):
+            rec = archive_data[idx]
+            st.markdown(f"""
+            <div style="background:#EDE8E0;border:1px solid #D4CEC4;border-radius:8px;
+                        padding:0.8rem 1.2rem;margin-bottom:1.5rem;">
+                <span style="font-size:0.8rem;color:#7A7268;">
+                    🗂 아카이브 조회 중 &nbsp;·&nbsp;
+                    <b style="color:#1A1714;">{rec.get('candidate_name','')}</b> &nbsp;·&nbsp;
+                    {rec.get('saved_at','')}
+                </span>
+            </div>
+            """, unsafe_allow_html=True)
+            render_result(rec["result"], rec.get("candidate_name",""))
+        if st.button("← 새 분석으로 돌아가기", use_container_width=True, key="s_back"):
+            st.session_state["show_archive"] = False
+            st.rerun()
+    else:
+        if st.session_state.get("analysis_done"):
+            st.markdown("""
+            <div style="background:#FBF8F3;border:1.5px solid #B8924A;border-radius:8px;
+                        padding:1rem 1.5rem;margin-bottom:1.2rem;">
                 <span style="font-size:0.75rem;font-weight:700;letter-spacing:2px;
                              text-transform:uppercase;color:#B8924A;">분석 완료</span>
                 <span style="font-size:0.8rem;color:#7A7268;margin-left:0.8rem;">
-                    새 대상자를 분석하려면 오른쪽 버튼을 클릭하세요
+                    새 대상자를 분석하려면 아래 버튼을 클릭하세요
                 </span>
             </div>
+            """, unsafe_allow_html=True)
+            if st.button("✦  새 분석 시작 — 초기화", use_container_width=True, key="s_reset"):
+                st.session_state["analysis_done"]   = False
+                st.session_state["analysis_result"] = None
+                st.session_state["analysis_name"]   = None
+                st.rerun()
+            st.markdown('<div style="height:0.5rem;"></div>', unsafe_allow_html=True)
+            st.success("✅ 분석 완료 — 왼쪽 아카이브에 자동 저장되었습니다.")
+            render_result(st.session_state["analysis_result"], st.session_state["analysis_name"])
+        else:
+            run = st.button("◈  분석 시작", use_container_width=True, key="s_run")
+            if run:
+                if not uploaded_files:
+                    st.error("⚠️ 최소 1개 이상의 파일을 업로드해야 분석할 수 있습니다.")
+                elif not candidate_name:
+                    st.error("⚠️ 대상자 성명을 입력해주세요.")
+                else:
+                    with st.spinner("분석 중 — 업로드된 자료를 종합 검토하고 있습니다..."):
+                        try:
+                            R = analyze_candidate(api_key, file_data, candidate_name, company_standard_s)
+                            record = {
+                                "saved_at":       datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                "candidate_name": candidate_name or "이름 없음",
+                                "dept":           candidate_dept,
+                                "result":         R
+                            }
+                            save_to_archive(record)
+                            st.session_state["analysis_done"]   = True
+                            st.session_state["analysis_result"] = R
+                            st.session_state["analysis_name"]   = candidate_name
+                            st.rerun()
+                        except json.JSONDecodeError as e:
+                            st.error(f"결과 파싱 오류. 잠시 후 다시 시도해주세요. (상세: {str(e)[:80]})")
+                        except anthropic.AuthenticationError:
+                            st.error("API Key가 유효하지 않습니다.")
+                        except anthropic.APIStatusError as e:
+                            st.error(f"API 오류 ({e.status_code}): {str(e.message)[:120]}")
+                        except Exception as e:
+                            st.error(f"오류 발생: {e}")
+
+
+# ════════════════════════════════════════════════════════
+#  TAB 2 — 대량 분석
+# ════════════════════════════════════════════════════════
+with tab_bulk:
+    st.markdown("""
+    <div class="section-header">
+        <span class="section-num">01</span>
+        <span class="section-title">대량 분석 대상자 등록</span>
+        <div class="section-rule"></div>
+    </div>
+    <p style="font-size:0.8rem;color:#7A7268;margin-bottom:1.2rem;">
+        대상자를 한 명씩 등록한 뒤 <b>전체 분석 시작</b> 버튼을 누르면 순차적으로 분석됩니다.
+        분석 완료된 결과는 아카이브에 자동 저장됩니다.
+    </p>
+    """, unsafe_allow_html=True)
+
+    if "bulk_list"    not in st.session_state: st.session_state["bulk_list"]    = []
+    if "bulk_results" not in st.session_state: st.session_state["bulk_results"] = []
+    if "bulk_done"    not in st.session_state: st.session_state["bulk_done"]    = False
+
+    # ── 대상자 추가 폼 ──
+    with st.expander("➕  대상자 추가", expanded=not st.session_state["bulk_done"]):
+        ba1, ba2 = st.columns(2)
+        with ba1: b_name = st.text_input("성명 *", placeholder="홍길동", key="b_name")
+        with ba2: b_dept = st.text_input("소속 부서", placeholder="Sales & Marketing Division", key="b_dept")
+        b_files = st.file_uploader(
+            "자료 업로드 (이력서·기안서·MBTI·인적성 등, 여러 파일 동시 선택 가능)",
+            type=["pdf","docx","jpg","jpeg","png","webp","txt","md"],
+            accept_multiple_files=True, key="b_uploader"
+        )
+        if st.button("목록에 추가", use_container_width=True, key="b_add"):
+            if not b_name:
+                st.error("⚠️ 성명을 입력해주세요.")
+            elif not b_files:
+                st.error("⚠️ 파일을 최소 1개 이상 업로드해주세요.")
+            else:
+                fd = {uf.name: read_file_content(uf) for uf in b_files}
+                if b_dept: fd["소속 부서"] = b_dept
+                fd["회사 인재상"]        = company_standard
+                fd["회사 5대 핵심문화 축"] = core_culture
+                st.session_state["bulk_list"].append({
+                    "name": b_name, "dept": b_dept,
+                    "file_data": fd, "file_count": len(b_files)
+                })
+                st.success(f"✅ {b_name} 등록 완료 ({len(b_files)}개 파일)")
+                st.rerun()
+
+    # ── 등록된 목록 ──
+    if st.session_state["bulk_list"]:
+        st.markdown("""
+        <div class="section-header" style="margin-top:1.5rem;">
+            <span class="section-num">02</span>
+            <span class="section-title">등록된 대상자 목록</span>
+            <div class="section-rule"></div>
         </div>
         """, unsafe_allow_html=True)
 
-        if st.button("✦  새 분석 시작 — 초기화", use_container_width=True):
-            st.session_state["analysis_done"]   = False
-            st.session_state["analysis_result"] = None
-            st.session_state["analysis_name"]   = None
-            st.rerun()
-
-        st.markdown('<div style="height:0.5rem;"></div>', unsafe_allow_html=True)
-        st.success("✅ 분석 완료 — 왼쪽 아카이브에 자동 저장되었습니다.")
-
-        render_result(
-            st.session_state["analysis_result"],
-            st.session_state["analysis_name"]
-        )
-
-    else:
-        # ── Run Button ──
-        run = st.button("◈  분석 시작", use_container_width=True)
-
-        if run:
-            # 파일 필수 체크 (이름만으론 분석 불가)
-            if not uploaded_files:
-                st.error("⚠️ 최소 1개 이상의 파일을 업로드해야 분석할 수 있습니다.")
-            elif not candidate_name:
-                st.error("⚠️ 대상자 성명을 입력해주세요.")
-            else:
-                with st.spinner("분석 중 — 업로드된 자료를 종합 검토하고 있습니다..."):
-                    try:
-                        R = analyze_candidate(api_key, file_data, candidate_name, company_standard)
-
-                        # 아카이브 저장
-                        record = {
-                            "saved_at":       datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                            "candidate_name": candidate_name or "이름 없음",
-                            "dept":           candidate_dept,
-                            "result":         R
-                        }
-                        save_to_archive(record)
-
-                        # 결과를 session_state에 저장 후 rerun
-                        st.session_state["analysis_done"]   = True
-                        st.session_state["analysis_result"] = R
-                        st.session_state["analysis_name"]   = candidate_name
+        for i, cand in enumerate(st.session_state["bulk_list"]):
+            done = i < len(st.session_state["bulk_results"])
+            lc1, lc2, lc3 = st.columns([4, 2, 1])
+            with lc1:
+                st.markdown(f"""
+                <div style="background:white;border:1px solid #D4CEC4;border-radius:6px;
+                            padding:0.7rem 1rem;border-left:3px solid {'#2D6A4F' if done else '#B8924A'};">
+                    <b style="font-size:0.9rem;color:#1A1714;">{cand['name']}</b>
+                    <span style="font-size:0.75rem;color:#7A7268;margin-left:0.6rem;">{cand.get('dept','')}</span>
+                    <span style="font-size:0.7rem;color:#B0A898;margin-left:0.6rem;">{cand['file_count']}개 파일</span>
+                </div>
+                """, unsafe_allow_html=True)
+            with lc2:
+                status = "✅ 분석 완료" if done else "⏳ 대기 중"
+                st.markdown(f'<p style="font-size:0.75rem;color:#7A7268;padding:0.85rem 0;">{status}</p>', unsafe_allow_html=True)
+            with lc3:
+                if not st.session_state["bulk_done"]:
+                    if st.button("삭제", key=f"bdel_{i}", use_container_width=True):
+                        st.session_state["bulk_list"].pop(i)
+                        if i < len(st.session_state["bulk_results"]):
+                            st.session_state["bulk_results"].pop(i)
                         st.rerun()
 
-                    except json.JSONDecodeError as e:
-                        st.error(f"결과 파싱 오류 — AI 응답을 해석하지 못했습니다. 잠시 후 다시 시도해주세요. (상세: {str(e)[:80]})")
-                    except anthropic.AuthenticationError:
-                        st.error("API Key가 유효하지 않습니다. Streamlit Secrets를 확인해주세요.")
-                    except anthropic.APIStatusError as e:
-                        st.error(f"API 오류 ({e.status_code}): {str(e.message)[:120]}")
-                    except Exception as e:
-                        st.error(f"오류 발생: {e}")
+        st.markdown('<div style="height:1rem;"></div>', unsafe_allow_html=True)
 
-# Footer
+        # ── 전체 분석 시작 ──
+        if not st.session_state["bulk_done"]:
+            total = len(st.session_state["bulk_list"])
+            if st.button(f"◈  전체 {total}명 분석 시작", use_container_width=True, key="b_run"):
+                st.session_state["bulk_results"] = []
+                prog = st.progress(0, text="분석 준비 중...")
+                for i, cand in enumerate(st.session_state["bulk_list"]):
+                    prog.progress(i / total, text=f"({i+1}/{total}) {cand['name']} 분석 중...")
+                    try:
+                        R = analyze_candidate(api_key, cand["file_data"], cand["name"], company_standard)
+                        st.session_state["bulk_results"].append({
+                            "name": cand["name"], "dept": cand.get("dept",""),
+                            "result": R, "success": True
+                        })
+                        save_to_archive({
+                            "saved_at":       datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            "candidate_name": cand["name"],
+                            "dept":           cand.get("dept",""),
+                            "result":         R
+                        })
+                    except Exception as e:
+                        st.session_state["bulk_results"].append({
+                            "name": cand["name"], "dept": cand.get("dept",""),
+                            "result": {}, "success": False, "error": str(e)
+                        })
+                    prog.progress((i + 1) / total, text=f"({i+1}/{total}) {cand['name']} 완료")
+                prog.progress(1.0, text=f"✅ 전체 {total}명 분석 완료!")
+                st.session_state["bulk_done"] = True
+                st.rerun()
+
+        # ── 대량 분석 결과 ──
+        if st.session_state["bulk_done"] and st.session_state["bulk_results"]:
+            st.markdown("""
+            <div class="section-header" style="margin-top:2rem;">
+                <span class="section-num">03</span>
+                <span class="section-title">대량 분석 결과 요약</span>
+                <div class="section-rule"></div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # 비교 테이블
+            dim_keys  = ["cognitive_ability","job_expertise","proactiveness","leadership"]
+            dim_names = ["인지능력","잡전문성","적극성","리더십"]
+            re_emoji  = {"LOW":"🟢","MEDIUM":"🟡","HIGH":"🔴","CRITICAL":"🔴"}.get
+            rows = ["| 이름 | 부서 | " + " | ".join(dim_names) + " | 번아웃 | 이직위험 | 한줄평 |",
+                    "|------|------|" + "|:---:|" * 4 + "|:---:|:---:|------|"]
+            for br in st.session_state["bulk_results"]:
+                if not br["success"]:
+                    rows.append(f"| {br['name']} | {br['dept']} | ❌ 분석 실패 | | | | | |")
+                    continue
+                R = br["result"]
+                dims   = R.get("dimensions", {})
+                scores = [str(dims.get(k,{}).get("score","?")) for k in dim_keys]
+                b_lvl  = R.get("burnout_risk",{}).get("level","?")
+                t_lvl  = R.get("turnover_risk",{}).get("level","?")
+                smry   = R.get("candidate_summary","")[:28] + "..."
+                rows.append(f"| {br['name']} | {br['dept']} | {' | '.join(scores)} | {re_emoji(b_lvl,'⚪')} {b_lvl} | {re_emoji(t_lvl,'⚪')} {t_lvl} | {smry} |")
+            st.markdown("\n".join(rows))
+
+            # 결과 다운로드
+            export_bulk = [{"name":br["name"],"dept":br["dept"],"result":br.get("result",{})} for br in st.session_state["bulk_results"] if br["success"]]
+            st.download_button(
+                "⬇ 전체 결과 JSON 다운로드",
+                data=json.dumps(export_bulk, ensure_ascii=False, indent=2).encode("utf-8"),
+                file_name=f"bulk_analysis_{datetime.now().strftime('%Y%m%d_%H%M')}.json",
+                mime="application/json", use_container_width=True
+            )
+            st.markdown('<div style="height:1.5rem;"></div>', unsafe_allow_html=True)
+
+            # 개별 상세 결과
+            st.markdown("""
+            <div class="section-header">
+                <span class="section-num">04</span>
+                <span class="section-title">개별 상세 결과</span>
+                <div class="section-rule"></div>
+            </div>
+            """, unsafe_allow_html=True)
+            for br in st.session_state["bulk_results"]:
+                icon = "✅" if br["success"] else "❌"
+                with st.expander(f"{icon}  {br['name']} · {br.get('dept','')}"):
+                    if br["success"]:
+                        render_result(br["result"], br["name"])
+                    else:
+                        st.error(f"분석 실패: {br.get('error','')}")
+
+            if st.button("🔄  초기화 (새 대량 분석 시작)", use_container_width=True, key="b_reset"):
+                st.session_state["bulk_list"]    = []
+                st.session_state["bulk_results"] = []
+                st.session_state["bulk_done"]    = False
+                st.rerun()
+    else:
+        st.markdown('<p style="font-size:0.82rem;color:#B0A898;text-align:center;padding:2rem 0;">위 폼에서 대상자를 추가해주세요.</p>', unsafe_allow_html=True)
+
+
+# ── Footer ──
 st.markdown("""
 <div style="text-align:center;padding:3rem 0 1.5rem;font-size:0.65rem;
-     letter-spacing:2px;text-transform:uppercase;color:#C8C0B4;border-top:1px solid #E2DDD4;margin-top:3rem;">
+     letter-spacing:2px;text-transform:uppercase;color:#C8C0B4;
+     border-top:1px solid #E2DDD4;margin-top:3rem;">
     Talent Intelligence Platform &nbsp;·&nbsp; M.I.Tech P&C Team &nbsp;·&nbsp; Powered by Claude AI
 </div>
 """, unsafe_allow_html=True)
