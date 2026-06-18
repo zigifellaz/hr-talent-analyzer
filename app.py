@@ -663,6 +663,14 @@ def analyze_candidate(api_key, file_data, candidate_name, company_standard):
     client = anthropic.Anthropic(api_key=api_key)
     system_prompt = """당신은 글로벌 탑티어 HR 컨설팅 펌(McKinsey People & Organization, Korn Ferry, Spencer Stuart 수준)의 수석 어세스먼트 컨설턴트입니다. 조직심리학 박사 학위와 15년 이상의 임원 평가 및 인재 어세스먼트 경험을 보유하고 있습니다.
 
+【핵심 분석 목적 — 조직 리밸런싱 (Rebalancing)】
+본 분석의 궁극적 목적은 조직 재구성을 위한 의사결정 지원입니다. 구체적으로:
+1. 누가 조직에 핵심적으로 남아야 하는가(Keep)
+2. 누가 조직 방향성과 적합하지 않은가(Misfit)
+3. 누구에게 리더 역할을 부여할 수 있는가(Leadership Readiness)
+4. 각 인원의 향후 커리어 트랙(Career Track) 방향
+이 4가지 판단에 직결되는 실용적 인사이트를 제공해야 합니다.
+
 당신의 분석은 다음 프레임워크를 통합적으로 적용합니다:
 - Korn Ferry의 Leadership Architect (역량 모델 67개 팩터)
 - SHL의 OPQ32 (성격 및 행동 선호도 측정)
@@ -677,7 +685,26 @@ def analyze_candidate(api_key, file_data, candidate_name, company_standard):
 2. 다층적 교차 검증: 단일 자료가 아닌 복수 자료 간 일관성·불일치를 분석하여 표면 행동과 내재 동기를 구분합니다.
 3. 조직 적합도 연계: 개인 역량 분석을 회사 인재상 및 직무 요구사항과 명시적으로 연결합니다.
 4. 위험 요인 식별: 강점 이면의 잠재적 취약점(Derailer)을 전문가 시각으로 도출합니다.
-5. 실용적 채용 전환: 분석 결과를 실제 채용 현장에서 즉시 활용 가능한 행동 지표로 전환합니다.
+5. 리밸런싱 판단 직결: 분석 결과를 Keep/Misfit/리더 적합성/커리어 트랙 판단으로 명확히 전환합니다.
+6. SNS 자료 활용: SNS 자료가 제공된 경우, 개인 성향 및 내부 조직문화 적합성 파악 목적으로만 분석하며 대외비로 취급합니다.
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+추가 정량 평가 항목 (조직 적합도 & 리더십 준비도)
+━━━━━━━━━━━━━━━━━━━━━━━━
+[조직 적합도 - Organizational Fit] (100점 만점)
+- 인재상 부합도: 회사 인재상(성장지향/상호존중/혁신과 도전)과의 일치도
+- 문화 적합성: 5대 핵심문화 축(개방적 소통/몰입 실행/성과 인정/협업 시너지/혁신 리더십)과의 정합성
+- 방향성 일치: 엠아이텍의 향후 전략 방향과 개인 역량·성향의 정렬도
+- 점수가 낮을수록(50점 미만) 조직 부적합(Misfit) 신호로 해석
+
+[리더십 준비도 - Leadership Readiness] (100점 만점)
+- 현재 리더 역할 수행 가능 수준을 정량 평가
+- 80점 이상: 즉시 리더 역할 부여 가능 / 60-79: 육성 후 부여 / 60점 미만: 리더 역할 부적합
+- 리더십 잠재력과 현재 발현 수준을 구분하여 평가
+
+[학력-성과 정합성 - Credential-Performance Alignment]
+- 학력 수준(학위/대학) 대비 실제 업무 성과의 일치 여부를 분석
+- 고학력이 실제 성과로 이어지는지, 또는 학력 대비 성과가 미흡한지 판별
 
 ━━━━━━━━━━━━━━━━━━━━━━━━
 각 차원별 평가 기준
@@ -802,19 +829,48 @@ def analyze_candidate(api_key, file_data, candidate_name, company_standard):
       "how_to_check": "STAR 기반 질문 1개 + 평가 포인트"
     }
   ],
+  "org_fit": {
+    "score": 75,
+    "grade": "B+",
+    "talent_match": "인재상 부합도 1-2문장 평가",
+    "culture_fit": "5대 핵심문화 축 정합성 1-2문장 평가",
+    "direction_alignment": "회사 방향성 정렬도 1-2문장 평가",
+    "summary": "2문장. 조직 적합도 종합 및 Misfit 여부 판단"
+  },
+  "leadership_readiness": {
+    "score": 65,
+    "level": "육성 후 부여",
+    "rationale": "2문장. 리더십 준비도 판단 근거",
+    "recommendation": "리더 역할 부여 가능 여부 명확한 결론 (즉시 가능 / 육성 후 가능 / 부적합 중 택1 + 1문장 설명)"
+  },
+  "credential_performance": {
+    "alignment": "일치 / 학력우위 / 성과우위 중 택1",
+    "education_level": "확인된 학력 수준 (자료 없으면 '자료 미제공')",
+    "summary": "2문장. 학력 대비 실제 성과 정합성 분석"
+  },
+  "career_track": {
+    "current_position": "현재 포지션 추정",
+    "recommended_track": "추천 커리어 트랙 (전문가형/관리자형/전환필요 등)",
+    "summary": "2-3문장. 향후 커리어 방향 제언"
+  },
+  "rebalancing_verdict": {
+    "decision": "KEEP / DEVELOP / WATCH / MISFIT 중 택1",
+    "confidence": "HIGH / MEDIUM / LOW 중 택1",
+    "rationale": "2-3문장. 리밸런싱 관점 핵심 판단 근거. 조직에 남아야 하는지/방향성과 맞는지 명확히"
+  },
   "derailer": "2문장. 스트레스·장기 재직 시 부정적 행동 패턴",
   "development_suggestion": "2문장. 최고 성과를 위한 환경·관리 방식",
-  "overall_insight": "4문장. 인재 유형 명명·최적 포지셔닝·채용 최종 권고"
+  "overall_insight": "4문장. 인재 유형 명명·최적 포지셔닝·리밸런싱 최종 권고"
 }"""
 
     user_content = build_user_content(file_data, candidate_name, company_standard)
     if not user_content:
         raise ValueError("분석할 자료가 없습니다.")
-    user_content.append({"type": "text", "text": "위 자료를 바탕으로 글로벌 탑티어 HR 컨설팅 펌 수준의 전문 인재 분석을 JSON 형식으로 수행해주세요. 모든 평가는 제공된 자료의 구체적 근거에 기반해야 하며, 표면적 관찰을 넘어 내재된 역량 패턴과 조직 적합도를 심층 분석해주세요."})
+    user_content.append({"type": "text", "text": "위 자료를 바탕으로 조직 리밸런싱(Rebalancing) 관점의 전문 인재 분석을 JSON 형식으로 수행해주세요. 모든 평가는 제공된 자료의 구체적 근거에 기반해야 하며, 특히 '이 인원이 조직에 남아야 하는지', '회사 방향성과 맞는지', '리더 역할 부여가 가능한지', '향후 커리어 트랙은 무엇인지'에 대한 명확한 판단을 제공해주세요."})
 
     response = client.messages.create(
         model="claude-opus-4-5",
-        max_tokens=8000,
+        max_tokens=10000,
         system=system_prompt,
         messages=[{"role": "user", "content": user_content}]
     )
@@ -970,6 +1026,42 @@ def delete_from_archive(record_id, idx: int):
         json.dump(archive, f, ensure_ascii=False, indent=2)
 
 
+# ─── 조직도 데이터 & 상태 판정 ────────────────────────────────────────────────
+def load_org_data() -> dict:
+    """org_data.json 로드"""
+    try:
+        if Path("org_data.json").exists():
+            with open("org_data.json", "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return {}
+
+def get_person_status(name: str, archive_by_name: dict) -> tuple:
+    """
+    분석 결과 유무 + 위험도에 따라 상태등 색상 반환
+    returns: (status, color, result_or_none)
+    status: 'none'(분석없음) / 'green'(정상) / 'yellow'(주의) / 'red'(긴급)
+    """
+    rec = archive_by_name.get(name)
+    if not rec:
+        return ("none", "#C0BCB4", None)
+
+    R = rec.get("result", {})
+    b_lvl = R.get("burnout_risk", {}).get("level", "LOW")
+    t_lvl = R.get("turnover_risk", {}).get("level", "LOW")
+    verdict = R.get("rebalancing_verdict", {}).get("decision", "")
+
+    # 긴급(빨강): CRITICAL 위험 또는 MISFIT 판정
+    if b_lvl == "CRITICAL" or t_lvl == "CRITICAL" or verdict == "MISFIT":
+        return ("red", "#C0392B", R)
+    # 주의(노랑): HIGH/MEDIUM 위험 또는 WATCH 판정
+    if b_lvl in ("HIGH", "MEDIUM") or t_lvl in ("HIGH", "MEDIUM") or verdict == "WATCH":
+        return ("yellow", "#E0A800", R)
+    # 정상(초록)
+    return ("green", "#2D6A4F", R)
+
+
 # ─── 결과 렌더링 함수 (신규 분석 & 아카이브 조회 공용) ──────────────────────
 def render_result(R: dict, candidate_name: str):
     name_d = candidate_name or "대상자"
@@ -979,17 +1071,115 @@ def render_result(R: dict, candidate_name: str):
     )
     st.markdown(f"""
     <div class="report-cover">
-        <div class="report-cover-label">◈ Talent Analysis Report</div>
+        <div class="report-cover-label">◈ Talent Analysis Report · Rebalancing</div>
         <div class="report-cover-name">{name_d}</div>
         <div class="report-cover-summary">{R.get('candidate_summary','')}</div>
         <div>{tags_html}</div>
     </div>
     """, unsafe_allow_html=True)
 
+    # ── 리밸런싱 판정 배너 ──
+    rv = R.get("rebalancing_verdict", {})
+    if rv:
+        decision = rv.get("decision", "—")
+        confidence = rv.get("confidence", "—")
+        dec_style = {
+            "KEEP":    ("#2D6A4F", "#EAF4EE", "✓ KEEP — 핵심 인재, 유지 권장"),
+            "DEVELOP": ("#2B3D5C", "#E8EEF5", "↗ DEVELOP — 육성 대상"),
+            "WATCH":   ("#8B6914", "#FBF3E0", "◷ WATCH — 관찰 필요"),
+            "MISFIT":  ("#8B2635", "#FAEAEC", "✕ MISFIT — 조직 방향성 부적합"),
+        }
+        color, bg, label = dec_style.get(decision, ("#7A7268", "#EDE8E0", decision))
+        st.markdown(f"""
+        <div style="background:{bg};border:2px solid {color};border-radius:10px;
+                    padding:1.3rem 1.8rem;margin-bottom:1.5rem;
+                    display:flex;align-items:center;justify-content:space-between;">
+            <div>
+                <div style="font-size:0.6rem;font-weight:700;letter-spacing:3px;
+                            text-transform:uppercase;color:{color};margin-bottom:0.3rem;">
+                    Rebalancing Verdict
+                </div>
+                <div style="font-size:1.1rem;font-weight:800;color:{color};">{label}</div>
+            </div>
+            <div style="text-align:right;">
+                <div style="font-size:0.6rem;color:#7A7268;letter-spacing:1px;">신뢰도</div>
+                <div style="font-size:0.95rem;font-weight:700;color:{color};">{confidence}</div>
+            </div>
+        </div>
+        <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;
+                    padding:1rem 1.3rem;margin-bottom:1.5rem;">
+            <div style="font-size:0.83rem;color:#3D3830;line-height:1.75;">
+                {rv.get('rationale','')}
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # ── 조직 적합도 & 리더십 준비도 ──
+    ofit = R.get("org_fit", {})
+    lead = R.get("leadership_readiness", {})
+    if ofit or lead:
+        st.markdown("""
+        <div class="section-header">
+            <span class="section-num">02</span>
+            <span class="section-title">조직 적합도 & 리더십 준비도</span>
+            <div class="section-rule"></div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        of_col, lr_col = st.columns(2)
+        with of_col:
+            of_score = ofit.get("score", 0)
+            of_color = "#2D6A4F" if of_score >= 70 else ("#8B6914" if of_score >= 50 else "#8B2635")
+            st.markdown(f"""
+            <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;
+                        padding:1.4rem 1.6rem;border-left:3px solid {of_color};">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.6rem;">
+                    <span style="font-size:0.65rem;font-weight:700;letter-spacing:2px;
+                                 text-transform:uppercase;color:{of_color};">🎯 조직 적합도</span>
+                    <span style="font-family:'DM Serif Display',serif;font-size:1.8rem;
+                                 font-style:italic;color:{of_color};">{of_score}<span style="font-size:0.8rem;color:#B0A898;">/100</span></span>
+                </div>
+                <div style="background:#E2DDD4;border-radius:999px;height:4px;margin-bottom:0.9rem;overflow:hidden;">
+                    <div style="width:{of_score}%;height:100%;background:{of_color};border-radius:999px;"></div>
+                </div>
+                <div style="font-size:0.78rem;color:#3D3830;line-height:1.7;margin-bottom:0.6rem;">{ofit.get('summary','')}</div>
+                <div style="border-top:1px solid #E2DDD4;padding-top:0.6rem;font-size:0.73rem;color:#7A7268;line-height:1.6;">
+                    <b style="color:#3D3830;">인재상</b> {ofit.get('talent_match','')}<br>
+                    <b style="color:#3D3830;">문화</b> {ofit.get('culture_fit','')}<br>
+                    <b style="color:#3D3830;">방향성</b> {ofit.get('direction_alignment','')}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        with lr_col:
+            lr_score = lead.get("score", 0)
+            lr_color = "#2D6A4F" if lr_score >= 80 else ("#2B3D5C" if lr_score >= 60 else "#8B2635")
+            st.markdown(f"""
+            <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;
+                        padding:1.4rem 1.6rem;border-left:3px solid {lr_color};">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.6rem;">
+                    <span style="font-size:0.65rem;font-weight:700;letter-spacing:2px;
+                                 text-transform:uppercase;color:{lr_color};">👑 리더십 준비도</span>
+                    <span style="font-family:'DM Serif Display',serif;font-size:1.8rem;
+                                 font-style:italic;color:{lr_color};">{lr_score}<span style="font-size:0.8rem;color:#B0A898;">/100</span></span>
+                </div>
+                <div style="background:#E2DDD4;border-radius:999px;height:4px;margin-bottom:0.9rem;overflow:hidden;">
+                    <div style="width:{lr_score}%;height:100%;background:{lr_color};border-radius:999px;"></div>
+                </div>
+                <div style="display:inline-block;background:{lr_color};color:white;border-radius:4px;
+                            padding:0.2rem 0.7rem;font-size:0.72rem;font-weight:700;margin-bottom:0.7rem;">
+                    {lead.get('level','—')}
+                </div>
+                <div style="font-size:0.78rem;color:#3D3830;line-height:1.7;margin-bottom:0.6rem;">{lead.get('rationale','')}</div>
+                <div style="border-top:1px solid #E2DDD4;padding-top:0.6rem;font-size:0.75rem;color:#3D3830;line-height:1.6;">
+                    <b style="color:{lr_color};">리더 부여 결론</b><br>{lead.get('recommendation','')}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
     # ── 역량 차원 ──
     st.markdown("""
     <div class="section-header">
-        <span class="section-num">04</span>
+        <span class="section-num">03</span>
         <span class="section-title">역량 차원 분석</span>
         <div class="section-rule"></div>
     </div>
@@ -1029,10 +1219,62 @@ def render_result(R: dict, candidate_name: str):
             </div>
             """, unsafe_allow_html=True)
 
+    # ── 학력-성과 정합성 & 커리어 트랙 ──
+    cp = R.get("credential_performance", {})
+    ct = R.get("career_track", {})
+    if cp or ct:
+        st.markdown("""
+        <div class="section-header" style="margin-top:2.5rem;">
+            <span class="section-num">05</span>
+            <span class="section-title">학력-성과 정합성 & 커리어 트랙</span>
+            <div class="section-rule"></div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        cp_col, ct_col = st.columns(2)
+        with cp_col:
+            align = cp.get("alignment", "—")
+            align_color = {"일치":"#2D6A4F","학력우위":"#8B2635","성과우위":"#2B3D5C"}.get(align, "#7A7268")
+            st.markdown(f"""
+            <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;
+                        padding:1.4rem 1.6rem;border-left:3px solid {align_color};height:100%;">
+                <div style="font-size:0.65rem;font-weight:700;letter-spacing:2px;
+                            text-transform:uppercase;color:{align_color};margin-bottom:0.6rem;">
+                    🎓 학력-성과 정합성
+                </div>
+                <div style="display:inline-block;background:{align_color};color:white;border-radius:4px;
+                            padding:0.2rem 0.7rem;font-size:0.72rem;font-weight:700;margin-bottom:0.7rem;">
+                    {align}
+                </div>
+                <div style="font-size:0.72rem;color:#7A7268;margin-bottom:0.5rem;">
+                    학력 수준: {cp.get('education_level','자료 미제공')}
+                </div>
+                <div style="font-size:0.8rem;color:#3D3830;line-height:1.7;">{cp.get('summary','')}</div>
+            </div>
+            """, unsafe_allow_html=True)
+        with ct_col:
+            st.markdown(f"""
+            <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;
+                        padding:1.4rem 1.6rem;border-left:3px solid #B8924A;height:100%;">
+                <div style="font-size:0.65rem;font-weight:700;letter-spacing:2px;
+                            text-transform:uppercase;color:#B8924A;margin-bottom:0.6rem;">
+                    🧭 커리어 트랙
+                </div>
+                <div style="font-size:0.72rem;color:#7A7268;margin-bottom:0.3rem;">
+                    현재: {ct.get('current_position','—')}
+                </div>
+                <div style="display:inline-block;background:#B8924A;color:white;border-radius:4px;
+                            padding:0.2rem 0.7rem;font-size:0.72rem;font-weight:700;margin-bottom:0.7rem;">
+                    {ct.get('recommended_track','—')}
+                </div>
+                <div style="font-size:0.8rem;color:#3D3830;line-height:1.7;">{ct.get('summary','')}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
     # ── 채용 키워드 ──
     st.markdown("""
     <div class="section-header" style="margin-top:2.5rem;">
-        <span class="section-num">05</span>
+        <span class="section-num">06</span>
         <span class="section-title">채용 핵심 키워드 Top 3</span>
         <div class="section-rule"></div>
     </div>
@@ -1064,7 +1306,7 @@ def render_result(R: dict, candidate_name: str):
     # ── 번아웃 & 이직 가능성 ──
     st.markdown("""
     <div class="section-header" style="margin-top:2.5rem;">
-        <span class="section-num">06</span>
+        <span class="section-num">07</span>
         <span class="section-title">번아웃 위험도 & 이직 가능성</span>
         <div class="section-rule"></div>
     </div>
@@ -1158,7 +1400,7 @@ def render_result(R: dict, candidate_name: str):
     # ── Derailer & Development ──
     st.markdown("""
     <div class="section-header" style="margin-top:2.5rem;">
-        <span class="section-num">07</span>
+        <span class="section-num">08</span>
         <span class="section-title">리스크 & 개발 제언</span>
         <div class="section-rule"></div>
     </div>
@@ -1195,8 +1437,8 @@ def render_result(R: dict, candidate_name: str):
     # ── Overall Insight ──
     st.markdown("""
     <div class="section-header" style="margin-top:2.5rem;">
-        <span class="section-num">08</span>
-        <span class="section-title">종합 인사이트 & 채용 권고</span>
+        <span class="section-num">09</span>
+        <span class="section-title">종합 인사이트 & 리밸런싱 권고</span>
         <div class="section-rule"></div>
     </div>
     """, unsafe_allow_html=True)
@@ -1313,7 +1555,7 @@ core_culture = """1) 개방적 소통 탁월성 (Open communication excellence)
 5) 혁신 리더십 (Innovation leadership)"""
 
 # ── 탭 ──
-tab_single, tab_bulk = st.tabs(["👤  개인 분석", "👥  대량 분석"])
+tab_single, tab_bulk, tab_org = st.tabs(["👤  개인 분석", "👥  대량 분석", "🏢  조직도"])
 
 
 # ════════════════════════════════════════════════════════
@@ -1330,7 +1572,7 @@ with tab_single:
     """, unsafe_allow_html=True)
     c1, c2 = st.columns(2)
     with c1:
-        candidate_name = st.text_input("성명", placeholder="홍길동", key="s_name")
+        candidate_name = st.text_input("성명", value=st.session_state.get("org_prefill_name",""), placeholder="홍길동", key="s_name")
     with c2:
         candidate_dept = st.text_input("소속 부서", placeholder="Sales & Marketing Division", key="s_dept")
     company_standard_s = st.text_area("회사 인재상", value=company_standard, height=110, key="s_std")
@@ -1596,39 +1838,169 @@ with tab_bulk:
             </div>
             """, unsafe_allow_html=True)
 
-            # 비교 테이블
+            # 비교 테이블 (리밸런싱 판정 포함)
             dim_keys  = ["cognitive_ability","job_expertise","proactiveness","leadership"]
-            dim_names = ["인지능력","잡전문성","적극성","리더십"]
+            dim_names = ["인지","전문성","적극성","리더십"]
             re_emoji  = {"LOW":"🟢","MEDIUM":"🟡","HIGH":"🔴","CRITICAL":"🔴"}.get
-            rows = ["| 이름 | 부서 | " + " | ".join(dim_names) + " | 번아웃 | 이직위험 | 한줄평 |",
-                    "|------|------|" + "|:---:|" * 4 + "|:---:|:---:|------|"]
+            verdict_emoji = {"KEEP":"✅","DEVELOP":"📈","WATCH":"👁","MISFIT":"⚠️"}.get
+            rows = ["| 이름 | 부서 | 판정 | 조직적합 | 리더십 | " + " | ".join(dim_names) + " | 번아웃 | 이직 |",
+                    "|------|------|:---:|:---:|:---:|" + "|:---:|" * 4 + "|:---:|:---:|"]
             for br in st.session_state["bulk_results"]:
                 if not br["success"]:
-                    rows.append(f"| {br['name']} | {br['dept']} | ❌ 분석 실패 | | | | | |")
+                    rows.append(f"| {br['name']} | {br['dept']} | ❌ | | | | | | | | |")
                     continue
                 R = br["result"]
-                dims   = R.get("dimensions", {})
-                scores = [str(dims.get(k,{}).get("score","?")) for k in dim_keys]
-                b_lvl  = R.get("burnout_risk",{}).get("level","?")
-                t_lvl  = R.get("turnover_risk",{}).get("level","?")
-                smry   = R.get("candidate_summary","")[:28] + "..."
-                rows.append(f"| {br['name']} | {br['dept']} | {' | '.join(scores)} | {re_emoji(b_lvl,'⚪')} {b_lvl} | {re_emoji(t_lvl,'⚪')} {t_lvl} | {smry} |")
+                dims    = R.get("dimensions", {})
+                scores  = [str(dims.get(k,{}).get("score","?")) for k in dim_keys]
+                b_lvl   = R.get("burnout_risk",{}).get("level","?")
+                t_lvl   = R.get("turnover_risk",{}).get("level","?")
+                verdict = R.get("rebalancing_verdict",{}).get("decision","?")
+                of_sc   = R.get("org_fit",{}).get("score","?")
+                lr_sc   = R.get("leadership_readiness",{}).get("score","?")
+                rows.append(f"| **{br['name']}** | {br['dept']} | {verdict_emoji(verdict,'⚪')} {verdict} | {of_sc} | {lr_sc} | {' | '.join(scores)} | {re_emoji(b_lvl,'⚪')} | {re_emoji(t_lvl,'⚪')} |")
             st.markdown("\n".join(rows))
 
-            # 결과 다운로드
-            export_bulk = [{"name":br["name"],"dept":br["dept"],"result":br.get("result",{})} for br in st.session_state["bulk_results"] if br["success"]]
-            st.download_button(
-                "⬇ 전체 결과 JSON 다운로드",
-                data=json.dumps(export_bulk, ensure_ascii=False, indent=2).encode("utf-8"),
-                file_name=f"bulk_analysis_{datetime.now().strftime('%Y%m%d_%H%M')}.json",
-                mime="application/json", use_container_width=True
-            )
+            st.markdown("""
+            <p style="font-size:0.7rem;color:#B0A898;margin-top:0.5rem;">
+            판정: ✅ KEEP(핵심·유지) · 📈 DEVELOP(육성) · 👁 WATCH(관찰) · ⚠️ MISFIT(부적합)
+            &nbsp;|&nbsp; 조직적합·리더십은 100점 만점
+            </p>
+            """, unsafe_allow_html=True)
+
+            # ── 집단 비교 분석 ──
+            st.markdown("""
+            <div class="section-header" style="margin-top:2rem;">
+                <span class="section-num">04</span>
+                <span class="section-title">집단 비교 분석</span>
+                <div class="section-rule"></div>
+            </div>
+            <p style="font-size:0.78rem;color:#7A7268;margin-bottom:1rem;">
+                부서·판정 분포를 한눈에 파악합니다.
+            </p>
+            """, unsafe_allow_html=True)
+
+            ok_results = [br for br in st.session_state["bulk_results"] if br["success"]]
+
+            # 판정 분포
+            verdict_count = {}
+            for br in ok_results:
+                v = br["result"].get("rebalancing_verdict",{}).get("decision","미분류")
+                verdict_count[v] = verdict_count.get(v, 0) + 1
+
+            vc1, vc2, vc3, vc4 = st.columns(4)
+            v_meta = [("KEEP","✅","#2D6A4F"),("DEVELOP","📈","#2B3D5C"),("WATCH","👁","#8B6914"),("MISFIT","⚠️","#8B2635")]
+            for col, (vk, emoji, vcolor) in zip([vc1,vc2,vc3,vc4], v_meta):
+                with col:
+                    cnt = verdict_count.get(vk, 0)
+                    st.markdown(f"""
+                    <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;
+                                padding:1.2rem;text-align:center;border-top:3px solid {vcolor};">
+                        <div style="font-size:1.5rem;">{emoji}</div>
+                        <div style="font-family:'DM Serif Display',serif;font-size:2rem;
+                                    color:{vcolor};font-style:italic;">{cnt}</div>
+                        <div style="font-size:0.65rem;letter-spacing:1px;color:#7A7268;
+                                    text-transform:uppercase;">{vk}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+            # 부서별 평균
+            from collections import defaultdict
+            dept_data = defaultdict(list)
+            for br in ok_results:
+                dept_data[br["dept"] or "미지정"].append(br["result"])
+
+            if len(dept_data) > 1:
+                st.markdown('<div style="height:1rem;"></div>', unsafe_allow_html=True)
+                st.markdown('<p style="font-size:0.75rem;font-weight:600;color:#3D3830;margin-bottom:0.5rem;">📊 부서별 평균 역량</p>', unsafe_allow_html=True)
+                drows = ["| 부서 | 인원 | 인지 | 전문성 | 적극성 | 리더십 | 조직적합 |",
+                         "|------|:---:|:---:|:---:|:---:|:---:|:---:|"]
+                for dept, results in dept_data.items():
+                    n = len(results)
+                    def avg(key, sub="score"):
+                        vals = [r.get("dimensions",{}).get(key,{}).get(sub,0) for r in results]
+                        vals = [v for v in vals if isinstance(v,(int,float))]
+                        return round(sum(vals)/len(vals)) if vals else "-"
+                    of_vals = [r.get("org_fit",{}).get("score",0) for r in results]
+                    of_vals = [v for v in of_vals if isinstance(v,(int,float))]
+                    of_avg = round(sum(of_vals)/len(of_vals)) if of_vals else "-"
+                    drows.append(f"| {dept} | {n} | {avg('cognitive_ability')} | {avg('job_expertise')} | {avg('proactiveness')} | {avg('leadership')} | {of_avg} |")
+                st.markdown("\n".join(drows))
+
+            st.markdown('<div style="height:1.5rem;"></div>', unsafe_allow_html=True)
+
+            # ── 다운로드 (JSON + Excel) ──
+            dl1, dl2 = st.columns(2)
+            with dl1:
+                export_bulk = [{"name":br["name"],"dept":br["dept"],"result":br.get("result",{})} for br in ok_results]
+                st.download_button(
+                    "⬇ 전체 결과 JSON",
+                    data=json.dumps(export_bulk, ensure_ascii=False, indent=2).encode("utf-8"),
+                    file_name=f"bulk_analysis_{datetime.now().strftime('%Y%m%d_%H%M')}.json",
+                    mime="application/json", use_container_width=True
+                )
+            with dl2:
+                # Excel 생성
+                try:
+                    import io as _io
+                    import openpyxl
+                    from openpyxl.styles import Font, PatternFill, Alignment
+
+                    wb = openpyxl.Workbook()
+                    ws = wb.active
+                    ws.title = "인재분석결과"
+                    headers = ["이름","부서","리밸런싱판정","신뢰도","조직적합도","리더십준비도",
+                               "인지능력","잡전문성","적극성","리더십",
+                               "번아웃","이직위험","학력성과정합","추천커리어트랙","한줄평","리밸런싱근거"]
+                    ws.append(headers)
+                    for c in range(1, len(headers)+1):
+                        cell = ws.cell(row=1, column=c)
+                        cell.font = Font(bold=True, color="FFFFFF", size=10)
+                        cell.fill = PatternFill("solid", fgColor="1A1714")
+                        cell.alignment = Alignment(horizontal="center", vertical="center")
+
+                    for br in ok_results:
+                        R = br["result"]
+                        d = R.get("dimensions",{})
+                        ws.append([
+                            br["name"], br["dept"],
+                            R.get("rebalancing_verdict",{}).get("decision",""),
+                            R.get("rebalancing_verdict",{}).get("confidence",""),
+                            R.get("org_fit",{}).get("score",""),
+                            R.get("leadership_readiness",{}).get("score",""),
+                            d.get("cognitive_ability",{}).get("score",""),
+                            d.get("job_expertise",{}).get("score",""),
+                            d.get("proactiveness",{}).get("score",""),
+                            d.get("leadership",{}).get("score",""),
+                            R.get("burnout_risk",{}).get("level",""),
+                            R.get("turnover_risk",{}).get("level",""),
+                            R.get("credential_performance",{}).get("alignment",""),
+                            R.get("career_track",{}).get("recommended_track",""),
+                            R.get("candidate_summary",""),
+                            R.get("rebalancing_verdict",{}).get("rationale",""),
+                        ])
+                    # 열 너비
+                    widths = [10,18,14,8,10,12,8,8,8,8,8,8,12,16,40,50]
+                    for i, w in enumerate(widths, 1):
+                        ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
+
+                    buf = _io.BytesIO()
+                    wb.save(buf)
+                    st.download_button(
+                        "⬇ 엑셀(.xlsx) 다운로드",
+                        data=buf.getvalue(),
+                        file_name=f"인재분석_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True
+                    )
+                except Exception as e:
+                    st.caption(f"엑셀 생성 오류: {e}")
+
             st.markdown('<div style="height:1.5rem;"></div>', unsafe_allow_html=True)
 
             # 개별 상세 결과
             st.markdown("""
             <div class="section-header">
-                <span class="section-num">04</span>
+                <span class="section-num">05</span>
                 <span class="section-title">개별 상세 결과</span>
                 <div class="section-rule"></div>
             </div>
@@ -1648,6 +2020,162 @@ with tab_bulk:
                 st.rerun()
     else:
         st.markdown('<p style="font-size:0.82rem;color:#B0A898;text-align:center;padding:2rem 0;">위 폼에서 대상자를 추가해주세요.</p>', unsafe_allow_html=True)
+
+
+# ════════════════════════════════════════════════════════
+#  TAB 3 — 조직도
+# ════════════════════════════════════════════════════════
+with tab_org:
+    st.markdown("""
+    <div class="section-header">
+        <span class="section-num">🏢</span>
+        <span class="section-title">조직도 · Talent Status Map</span>
+        <div class="section-rule"></div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # 범례
+    st.markdown("""
+    <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;
+                padding:0.9rem 1.3rem;margin-bottom:1.2rem;display:flex;
+                flex-wrap:wrap;gap:1.2rem;align-items:center;">
+        <span style="font-size:0.72rem;font-weight:700;color:#3D3830;letter-spacing:1px;">상태 범례</span>
+        <span style="font-size:0.75rem;color:#7A7268;"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#2D6A4F;margin-right:4px;"></span>정상</span>
+        <span style="font-size:0.75rem;color:#7A7268;"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#E0A800;margin-right:4px;"></span>주의 (번아웃·이직 신호)</span>
+        <span style="font-size:0.75rem;color:#7A7268;"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#C0392B;margin-right:4px;"></span>긴급 조치 필요</span>
+        <span style="font-size:0.75rem;color:#7A7268;"><span style="display:inline-block;width:18px;height:11px;border-radius:3px;background:#E8E4DC;margin-right:4px;vertical-align:middle;"></span>분석 데이터 없음</span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    org_data = load_org_data()
+
+    if not org_data:
+        st.warning("⚠️ org_data.json 파일이 없습니다. GitHub에 org_data.json을 함께 업로드해주세요.")
+    else:
+        # 아카이브를 이름 기준 딕셔너리로 (최신 우선)
+        archive_all = load_archive()
+        archive_by_name = {}
+        for rec in archive_all:
+            nm = rec.get("candidate_name", "")
+            if nm and nm not in archive_by_name:
+                archive_by_name[nm] = rec
+
+        # 통계
+        total_people = sum(len(people) for div in org_data.values()
+                           for team in div.values() for people in team.values())
+        analyzed = sum(1 for div in org_data.values() for team in div.values()
+                       for people in team.values() for p in people
+                       if p["name"] in archive_by_name)
+
+        st.markdown(f"""
+        <div style="display:flex;gap:1rem;margin-bottom:1.5rem;">
+            <div style="flex:1;background:white;border:1px solid #D4CEC4;border-radius:8px;padding:1rem;text-align:center;">
+                <div style="font-family:'DM Serif Display',serif;font-size:1.8rem;font-style:italic;color:#1A1714;">{total_people}</div>
+                <div style="font-size:0.62rem;letter-spacing:1px;text-transform:uppercase;color:#B0A898;">전체 인원</div>
+            </div>
+            <div style="flex:1;background:white;border:1px solid #D4CEC4;border-radius:8px;padding:1rem;text-align:center;">
+                <div style="font-family:'DM Serif Display',serif;font-size:1.8rem;font-style:italic;color:#2D6A4F;">{analyzed}</div>
+                <div style="font-size:0.62rem;letter-spacing:1px;text-transform:uppercase;color:#B0A898;">분석 완료</div>
+            </div>
+            <div style="flex:1;background:white;border:1px solid #D4CEC4;border-radius:8px;padding:1rem;text-align:center;">
+                <div style="font-family:'DM Serif Display',serif;font-size:1.8rem;font-style:italic;color:#B0A898;">{total_people - analyzed}</div>
+                <div style="font-size:0.62rem;letter-spacing:1px;text-transform:uppercase;color:#B0A898;">미분석</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # 팝업(모달) 처리 — 선택된 인원
+        sel = st.session_state.get("org_selected")
+        if sel:
+            sel_status, sel_color, sel_R = get_person_status(sel, archive_by_name)
+            if sel_R:
+                # 분석 결과 있음 → 결과 표시
+                st.markdown(f"""
+                <div style="background:#EDE8E0;border:1px solid #D4CEC4;border-radius:8px;
+                            padding:0.8rem 1.2rem;margin-bottom:1rem;">
+                    <span style="font-size:0.8rem;color:#7A7268;">
+                        🗂 조직도에서 선택 &nbsp;·&nbsp;
+                        <b style="color:#1A1714;">{sel}</b>
+                    </span>
+                </div>
+                """, unsafe_allow_html=True)
+                if st.button("✕  닫기", key="org_close"):
+                    st.session_state["org_selected"] = None
+                    st.rerun()
+                render_result(sel_R, sel)
+                if st.button("✕  조직도로 돌아가기", key="org_close2", use_container_width=True):
+                    st.session_state["org_selected"] = None
+                    st.rerun()
+            else:
+                # 분석 결과 없음 → 안내 + 이동 여부
+                st.markdown(f"""
+                <div style="background:#FBF3E0;border:2px solid #E0A800;border-radius:10px;
+                            padding:1.5rem 2rem;margin-bottom:1.2rem;text-align:center;">
+                    <div style="font-size:1.1rem;font-weight:700;color:#8B6914;margin-bottom:0.5rem;">
+                        📭 분석 결과가 없습니다
+                    </div>
+                    <div style="font-size:0.85rem;color:#7A7268;">
+                        <b>{sel}</b> 님의 분석 데이터가 아직 등록되지 않았습니다.<br>
+                        지금 분석을 진행하시겠습니까?
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                mc1, mc2 = st.columns(2)
+                with mc1:
+                    if st.button("✅  분석하러 가기 (개인 분석 탭)", key="org_goto", use_container_width=True):
+                        st.session_state["org_prefill_name"] = sel
+                        st.session_state["org_selected"] = None
+                        st.info("상단 '👤 개인 분석' 탭을 클릭해주세요. 성명이 자동 입력되어 있습니다.")
+                with mc2:
+                    if st.button("✕  취소", key="org_cancel", use_container_width=True):
+                        st.session_state["org_selected"] = None
+                        st.rerun()
+
+        st.markdown('<div class="hr"></div>', unsafe_allow_html=True)
+
+        # ── 조직도 렌더링 ──
+        for div_name, teams in org_data.items():
+            # 본부 카운트
+            div_people = [p for team in teams.values() for people in team.values() for p in people]
+            div_analyzed = sum(1 for p in div_people if p["name"] in archive_by_name)
+
+            with st.expander(f"🏛  {div_name}  ({div_analyzed}/{len(div_people)} 분석)", expanded=(div_name in ["전략기획본부"])):
+                for team_name, parts in teams.items():
+                    team_label = "" if team_name == "_직속" else team_name
+                    if team_label:
+                        st.markdown(f'<div style="font-size:0.82rem;font-weight:700;color:#2B3D5C;margin:0.8rem 0 0.4rem;padding-bottom:0.3rem;border-bottom:1px solid #E2DDD4;">▪ {team_label}</div>', unsafe_allow_html=True)
+
+                    for part_name, people in parts.items():
+                        part_label = "" if part_name == "_직속" else part_name
+                        if part_label:
+                            st.markdown(f'<div style="font-size:0.72rem;color:#7A7268;margin:0.4rem 0 0.2rem;padding-left:0.5rem;">└ {part_label}</div>', unsafe_allow_html=True)
+
+                        # 인원을 4열로 배치
+                        n_cols = 4
+                        for row_start in range(0, len(people), n_cols):
+                            cols = st.columns(n_cols)
+                            for ci, person in enumerate(people[row_start:row_start+n_cols]):
+                                with cols[ci]:
+                                    pname = person["name"]
+                                    status, color, _ = get_person_status(pname, archive_by_name)
+                                    is_none = (status == "none")
+                                    bg = "#E8E4DC" if is_none else "white"
+                                    dot = "" if is_none else f'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:{color};margin-left:5px;box-shadow:0 0 4px {color};"></span>'
+                                    role_badge = f' · {person["role"]}' if person.get("role") not in ("팀원","") else ""
+
+                                    # 버튼처럼 보이는 클릭 영역
+                                    if st.button(
+                                        f"{pname}",
+                                        key=f"org_{div_name}_{team_name}_{part_name}_{pname}_{row_start+ci}",
+                                        use_container_width=True
+                                    ):
+                                        st.session_state["org_selected"] = pname
+                                        st.rerun()
+                                    st.markdown(f"""
+                                    <div style="margin-top:-0.6rem;margin-bottom:0.4rem;text-align:center;">
+                                        <span style="font-size:0.62rem;color:#B0A898;">{person['pos']}{role_badge}</span>{dot}
+                                    </div>
+                                    """, unsafe_allow_html=True)
 
 
 # ── Footer ──
