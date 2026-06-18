@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import anthropic
 import base64
 import io
@@ -2133,49 +2134,175 @@ with tab_org:
 
         st.markdown('<div class="hr"></div>', unsafe_allow_html=True)
 
-        # ── 조직도 렌더링 ──
+        # ── 인터랙티브 조직도 (줌/팬 가능) ──
+        st.markdown("""
+        <p style="font-size:0.75rem;color:#7A7268;margin-bottom:0.5rem;">
+        💡 <b>Ctrl + 마우스 휠</b> 로 확대/축소 &nbsp;·&nbsp; <b>드래그</b> 로 이동 &nbsp;·&nbsp; <b>인원 카드 클릭</b> 시 아래 선택창에 반영
+        </p>
+        """, unsafe_allow_html=True)
+
+        # 조직도 HTML 빌드
+        def status_dot_color(name):
+            s, c, _ = get_person_status(name, archive_by_name)
+            return s, c
+
+        # 각 본부 컬럼 HTML 생성
+        div_blocks = []
         for div_name, teams in org_data.items():
-            # 본부 카운트
-            div_people = [p for team in teams.values() for people in team.values() for p in people]
-            div_analyzed = sum(1 for p in div_people if p["name"] in archive_by_name)
+            team_blocks = []
+            for team_name, parts in teams.items():
+                team_label = "" if team_name == "_직속" else team_name
+                part_blocks = []
+                for part_name, people in parts.items():
+                    part_label = "" if part_name == "_직속" else part_name
+                    cards = []
+                    for person in people:
+                        pname = person["name"]
+                        s, c = status_dot_color(pname)
+                        is_none = (s == "none")
+                        card_bg = "#E8E4DC" if is_none else "#FFFFFF"
+                        card_border = "#D8D2C8" if is_none else "#D4CEC4"
+                        name_color = "#9A9286" if is_none else "#1A1714"
+                        dot = "" if is_none else f'<span class="dot" style="background:{c};box-shadow:0 0 5px {c};"></span>'
+                        role = person.get("role","")
+                        role_txt = f" · {role}" if role and role != "팀원" else ""
+                        cards.append(
+                            f'<div class="pcard" style="background:{card_bg};border-color:{card_border};" '
+                            f'onclick="pick(\'{pname}\')">'
+                            f'<div class="pname" style="color:{name_color};">{pname}{dot}</div>'
+                            f'<div class="ppos">{person["pos"]}{role_txt}</div>'
+                            f'</div>'
+                        )
+                    part_html = ""
+                    if part_label:
+                        part_html += f'<div class="partlabel">{part_label}</div>'
+                    part_html += f'<div class="cards">{"".join(cards)}</div>'
+                    part_blocks.append(f'<div class="part">{part_html}</div>')
 
-            with st.expander(f"🏛  {div_name}  ({div_analyzed}/{len(div_people)} 분석)", expanded=(div_name in ["전략기획본부"])):
-                for team_name, parts in teams.items():
-                    team_label = "" if team_name == "_직속" else team_name
-                    if team_label:
-                        st.markdown(f'<div style="font-size:0.82rem;font-weight:700;color:#2B3D5C;margin:0.8rem 0 0.4rem;padding-bottom:0.3rem;border-bottom:1px solid #E2DDD4;">▪ {team_label}</div>', unsafe_allow_html=True)
+                team_html = ""
+                if team_label:
+                    team_html += f'<div class="teamlabel">{team_label}</div>'
+                team_html += f'<div class="parts">{"".join(part_blocks)}</div>'
+                team_blocks.append(f'<div class="team">{team_html}</div>')
 
-                    for part_name, people in parts.items():
-                        part_label = "" if part_name == "_직속" else part_name
-                        if part_label:
-                            st.markdown(f'<div style="font-size:0.72rem;color:#7A7268;margin:0.4rem 0 0.2rem;padding-left:0.5rem;">└ {part_label}</div>', unsafe_allow_html=True)
+            div_blocks.append(
+                f'<div class="div"><div class="divlabel">{div_name}</div>'
+                f'<div class="teams">{"".join(team_blocks)}</div></div>'
+            )
 
-                        # 인원을 4열로 배치
-                        n_cols = 4
-                        for row_start in range(0, len(people), n_cols):
-                            cols = st.columns(n_cols)
-                            for ci, person in enumerate(people[row_start:row_start+n_cols]):
-                                with cols[ci]:
-                                    pname = person["name"]
-                                    status, color, _ = get_person_status(pname, archive_by_name)
-                                    is_none = (status == "none")
-                                    bg = "#E8E4DC" if is_none else "white"
-                                    dot = "" if is_none else f'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:{color};margin-left:5px;box-shadow:0 0 4px {color};"></span>'
-                                    role_badge = f' · {person["role"]}' if person.get("role") not in ("팀원","") else ""
+        org_html = "".join(div_blocks)
 
-                                    # 버튼처럼 보이는 클릭 영역
-                                    if st.button(
-                                        f"{pname}",
-                                        key=f"org_{div_name}_{team_name}_{part_name}_{pname}_{row_start+ci}",
-                                        use_container_width=True
-                                    ):
-                                        st.session_state["org_selected"] = pname
-                                        st.rerun()
-                                    st.markdown(f"""
-                                    <div style="margin-top:-0.6rem;margin-bottom:0.4rem;text-align:center;">
-                                        <span style="font-size:0.62rem;color:#B0A898;">{person['pos']}{role_badge}</span>{dot}
-                                    </div>
-                                    """, unsafe_allow_html=True)
+        org_chart_html = f"""
+        <!DOCTYPE html><html><head><meta charset="utf-8"><style>
+        * {{ box-sizing:border-box; margin:0; padding:0; }}
+        body {{ font-family:'Noto Sans KR',-apple-system,sans-serif; background:#F7F3ED; overflow:hidden; }}
+        #viewport {{ width:100%; height:760px; overflow:hidden; position:relative;
+                     background:#F2EDE5; border:1px solid #D4CEC4; border-radius:10px; cursor:grab; }}
+        #viewport.grabbing {{ cursor:grabbing; }}
+        #canvas {{ transform-origin:0 0; padding:30px; display:inline-block; transition:transform 0.05s; }}
+        .org-root {{ display:flex; gap:24px; align-items:flex-start; }}
+        .div {{ background:#FFFFFF; border:1.5px solid #C9C1B4; border-radius:12px; padding:14px;
+                min-width:240px; box-shadow:0 2px 10px rgba(0,0,0,0.04); }}
+        .divlabel {{ font-size:14px; font-weight:800; color:#1A1714; text-align:center;
+                     padding:8px; background:#1A1714; color:#F7F3ED; border-radius:7px; margin-bottom:12px;
+                     letter-spacing:1px; }}
+        .teams {{ display:flex; flex-direction:column; gap:14px; }}
+        .team {{ border-left:3px solid #B8924A; padding-left:10px; }}
+        .teamlabel {{ font-size:12px; font-weight:700; color:#2B3D5C; margin-bottom:6px; }}
+        .parts {{ display:flex; flex-direction:column; gap:8px; }}
+        .partlabel {{ font-size:10px; color:#8A8278; margin:3px 0; padding-left:2px; }}
+        .cards {{ display:flex; flex-wrap:wrap; gap:6px; }}
+        .pcard {{ border:1px solid #D4CEC4; border-radius:7px; padding:7px 10px; cursor:pointer;
+                  min-width:88px; transition:all 0.15s; }}
+        .pcard:hover {{ border-color:#B8924A; box-shadow:0 3px 10px rgba(184,146,74,0.2);
+                        transform:translateY(-1px); }}
+        .pname {{ font-size:12px; font-weight:600; display:flex; align-items:center; gap:4px; }}
+        .ppos {{ font-size:9.5px; color:#B0A898; margin-top:1px; }}
+        .dot {{ display:inline-block; width:7px; height:7px; border-radius:50%; }}
+        #controls {{ position:absolute; bottom:14px; right:14px; display:flex; gap:6px; z-index:10; }}
+        #controls button {{ width:34px; height:34px; border:1px solid #D4CEC4; background:#FFFFFF;
+                            border-radius:7px; font-size:16px; cursor:pointer; color:#3D3830;
+                            box-shadow:0 2px 6px rgba(0,0,0,0.08); }}
+        #controls button:hover {{ background:#EDE8E0; }}
+        #zoomlabel {{ position:absolute; bottom:14px; left:14px; background:#FFFFFF;
+                      border:1px solid #D4CEC4; border-radius:7px; padding:5px 12px;
+                      font-size:11px; color:#7A7268; z-index:10; }}
+        </style></head><body>
+        <div id="viewport">
+            <div id="canvas"><div class="org-root">{org_html}</div></div>
+            <div id="zoomlabel">100%</div>
+            <div id="controls">
+                <button onclick="zoomBtn(0.1)">+</button>
+                <button onclick="zoomBtn(-0.1)">−</button>
+                <button onclick="resetView()">⊙</button>
+            </div>
+        </div>
+        <script>
+        let scale=0.85, tx=0, ty=0, panning=false, sx=0, sy=0;
+        const vp=document.getElementById('viewport');
+        const cv=document.getElementById('canvas');
+        const zl=document.getElementById('zoomlabel');
+        function apply(){{ cv.style.transform=`translate(${{tx}}px,${{ty}}px) scale(${{scale}})`;
+                           zl.textContent=Math.round(scale*100)+'%'; }}
+        function zoomBtn(d){{ scale=Math.min(2.5,Math.max(0.25,scale+d)); apply(); }}
+        function resetView(){{ scale=0.85; tx=0; ty=0; apply(); }}
+        vp.addEventListener('wheel',function(e){{
+            if(e.ctrlKey){{ e.preventDefault();
+                const r=vp.getBoundingClientRect();
+                const mx=e.clientX-r.left, my=e.clientY-r.top;
+                const before=scale;
+                scale=Math.min(2.5,Math.max(0.25,scale - e.deltaY*0.0015));
+                tx=mx-(mx-tx)*(scale/before);
+                ty=my-(my-ty)*(scale/before);
+                apply();
+            }}
+        }},{{passive:false}});
+        vp.addEventListener('mousedown',function(e){{
+            if(e.target.closest('.pcard'))return;
+            panning=true; sx=e.clientX-tx; sy=e.clientY-ty; vp.classList.add('grabbing');
+        }});
+        window.addEventListener('mousemove',function(e){{
+            if(panning){{ tx=e.clientX-sx; ty=e.clientY-sy; apply(); }}
+        }});
+        window.addEventListener('mouseup',function(){{ panning=false; vp.classList.remove('grabbing'); }});
+        function pick(name){{
+            const url=new URL(window.parent.location);
+            url.searchParams.set('person',name);
+            window.parent.history.pushState({{}},'',url);
+            window.parent.location.reload();
+        }}
+        apply();
+        </script>
+        </body></html>
+        """
+        components.html(org_chart_html, height=790, scrolling=False)
+
+        # 클릭 신호 처리 (쿼리 파라미터)
+        try:
+            picked = st.query_params.get("person")
+        except Exception:
+            picked = None
+        if picked and picked != st.session_state.get("org_selected"):
+            st.session_state["org_selected"] = picked
+            try:
+                st.query_params.clear()
+            except Exception:
+                pass
+            st.rerun()
+
+        # 수동 선택 백업 (쿼리파라미터 미작동 환경 대비)
+        st.markdown('<div style="height:1rem;"></div>', unsafe_allow_html=True)
+        all_names = sorted({p["name"] for div in org_data.values()
+                            for team in div.values() for people in team.values() for p in people})
+        msel1, msel2 = st.columns([3,1])
+        with msel1:
+            manual = st.selectbox("또는 직접 선택", ["— 선택 —"] + all_names, key="org_manual_sel")
+        with msel2:
+            st.markdown('<div style="height:1.7rem;"></div>', unsafe_allow_html=True)
+            if st.button("조회", use_container_width=True, key="org_manual_btn"):
+                if manual != "— 선택 —":
+                    st.session_state["org_selected"] = manual
+                    st.rerun()
 
 
 # ── Footer ──
