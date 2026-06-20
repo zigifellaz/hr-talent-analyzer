@@ -1854,6 +1854,23 @@ def material_chips_inline(covered):
             f'<span style="font-size:0.68rem;color:#7A7268;font-weight:700;margin-right:4px;">📋 충족 {cnt}/8</span>'
             f'{"".join(parts)}</div>')
 
+def friendly_api_error(e):
+    """API 오류를 비전문가용 한글 메시지로 변환."""
+    s = str(e)
+    low = s.lower()
+    if "credit balance is too low" in low or "plans & billing" in low or "purchase credits" in low:
+        return ("💳 API 크레딧 잔액이 부족합니다. Anthropic Console(console.anthropic.com) → Billing에서 "
+                "크레딧을 충전한 뒤 다시 분석해주세요. (API 사용료는 채팅 구독과 별개로 충전·과금됩니다.)")
+    if "rate_limit" in low or "rate limit" in low or "429" in s:
+        return "⏳ API 요청이 일시적으로 한도를 초과했습니다. 잠시 후 다시 시도하거나, 한 번에 분석하는 인원을 줄여주세요."
+    if "overloaded" in low or "529" in s:
+        return "⏳ Anthropic 서버가 일시적으로 혼잡합니다. 1~2분 뒤 다시 시도해주세요."
+    if "authentication" in low or "invalid x-api-key" in low or "401" in s:
+        return "🔑 API 키가 유효하지 않습니다. Streamlit Secrets의 ANTHROPIC_API_KEY를 확인해주세요."
+    if "permission" in low or "403" in s:
+        return "🔒 이 API 키로는 접근 권한이 없습니다. Console에서 키 권한·결제 상태를 확인해주세요."
+    return f"분석 중 오류가 발생했습니다: {s[:200]}"
+
 # ── 탭 ──
 tab_single, tab_bulk, tab_org = st.tabs(["👤  개인 분석", "👥  대량 분석", "🏢  조직도"])
 
@@ -1913,23 +1930,33 @@ with tab_single:
             unsafe_allow_html=True)
         pc1, pc2, pc3 = st.columns([1, 1.4, 1.5])
         with pc1:
-            s_bonbu = st.selectbox("본부", list(_flat.keys()), key="s_bonbu")
-        _units = _flat.get(s_bonbu, {})
-        with pc2:
-            s_unit = st.selectbox("팀 · 파트", list(_units.keys()), key="s_unit") if _units else None
-        _members = _units.get(s_unit, []) if s_unit else []
+            s_bonbu = st.selectbox("본부", ["전체"] + list(_flat.keys()), key="s_bonbu")
         _optmap, _opts = {}, []
-        for p in _members:
-            tag = "✅" if p["name"] in _done_names else "⚪"
-            lab = f'{tag} {p["name"]} · {p.get("pos", "")}'
-            _opts.append(lab)
-            _optmap[lab] = p
+        if s_bonbu == "전체":
+            with pc2:
+                st.markdown('<div style="font-size:0.78rem;color:#7A7268;padding-top:1.9rem;">전체 인원에서 선택 (이름 입력해 검색)</div>', unsafe_allow_html=True)
+            for _bn, _us in _flat.items():
+                for _u, _lst in _us.items():
+                    for p in _lst:
+                        tag = "✅" if p["name"] in _done_names else "⚪"
+                        lab = f'{tag} {p["name"]} · {p.get("pos", "")} · {_bn} / {_u}'
+                        _opts.append(lab)
+                        _optmap[lab] = (p, f"{_bn} / {_u}")
+        else:
+            _units = _flat.get(s_bonbu, {})
+            with pc2:
+                s_unit = st.selectbox("팀 · 파트", list(_units.keys()), key="s_unit") if _units else None
+            _members = _units.get(s_unit, []) if s_unit else []
+            for p in _members:
+                tag = "✅" if p["name"] in _done_names else "⚪"
+                lab = f'{tag} {p["name"]} · {p.get("pos", "")}'
+                _opts.append(lab)
+                _optmap[lab] = (p, (f"{s_bonbu} / {s_unit}" if s_unit else s_bonbu))
         with pc3:
             s_pick = st.selectbox("인원 (✅ 등록 / ⚪ 미등록)", _opts, key="s_pick") if _opts else None
         if s_pick:
-            _ps = _optmap[s_pick]
+            _ps, candidate_dept = _optmap[s_pick]
             candidate_name = _ps["name"]
-            candidate_dept = f"{s_bonbu} / {s_unit}" if s_unit else s_bonbu
             _reg = candidate_name in _done_names
             _badge = ('<span style="color:#2D6A4F;font-weight:700;">✅ 이미 분석 등록됨 — 다시 검사하면 최신 결과로 갱신됩니다</span>'
                       if _reg else
@@ -2093,11 +2120,11 @@ with tab_single:
                         except json.JSONDecodeError as e:
                             st.error(f"결과 파싱 오류. 잠시 후 다시 시도해주세요. (상세: {str(e)[:80]})")
                         except anthropic.AuthenticationError:
-                            st.error("API Key가 유효하지 않습니다.")
+                            st.error("🔑 API Key가 유효하지 않습니다. Streamlit Secrets의 ANTHROPIC_API_KEY를 확인해주세요.")
                         except anthropic.APIStatusError as e:
-                            st.error(f"API 오류 ({e.status_code}): {str(e.message)[:120]}")
+                            st.error(friendly_api_error(e))
                         except Exception as e:
-                            st.error(f"오류 발생: {e}")
+                            st.error(friendly_api_error(e))
 
 
 # ════════════════════════════════════════════════════════
@@ -2372,7 +2399,7 @@ with tab_bulk:
                             except Exception as e:
                                 st.session_state["bulk_results"].append({
                                     "name": cand["name"], "dept": cand.get("dept", ""),
-                                    "result": {}, "success": False, "error": str(e)})
+                                    "result": {}, "success": False, "error": friendly_api_error(e)})
                             prog.progress((k + 1) / n_t, text=f"({k+1}/{n_t}) {cand['name']} 완료")
                         prog.progress(1.0, text="✅ 분석 완료!")
                         st.session_state["bulk_done"] = True
@@ -2867,7 +2894,7 @@ with tab_bulk:
                             save_to_archive({"saved_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                                              "candidate_name": nm, "dept": dept, "result": R})
                         except Exception as e:
-                            st.session_state["auto_results"].append({"name": nm, "dept": _deptA.get(nm, ""), "result": {}, "success": False, "error": str(e)})
+                            st.session_state["auto_results"].append({"name": nm, "dept": _deptA.get(nm, ""), "result": {}, "success": False, "error": friendly_api_error(e)})
                         prog.progress((k + 1) / n_t, text=f"({k+1}/{n_t}) {nm} 완료")
                     prog.progress(1.0, text="✅ 분석 완료!")
                     st.session_state["auto_done"] = True
