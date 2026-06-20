@@ -2416,6 +2416,19 @@ with tab_bulk:
                 </div>
                 """, unsafe_allow_html=True)
 
+                _ok = [b for b in st.session_state["bulk_results"] if b.get("success")]
+                _fail = [b for b in st.session_state["bulk_results"] if not b.get("success")]
+                st.markdown(
+                    f'<div style="display:flex;gap:1.2rem;flex-wrap:wrap;margin-bottom:0.6rem;font-size:0.85rem;">'
+                    f'<span>✅ 성공 <b style="color:#2D6A4F;">{len(_ok)}</b>명</span>'
+                    f'<span>❌ 실패 <b style="color:#B0392B;">{len(_fail)}</b>명</span>'
+                    f'<span style="color:#7A7268;">(성공한 인원만 아카이브·분석 결과 탭에 저장됩니다)</span></div>',
+                    unsafe_allow_html=True)
+                if _fail:
+                    with st.expander(f"❌ 실패 {len(_fail)}명 · 사유 보기 (재분석 필요)", expanded=True):
+                        for b in _fail:
+                            st.markdown(f"- **{b['name']}** · {b.get('dept','')} → {b.get('error','(사유 미상)')}")
+
                 # 비교 테이블 (종합 점수 순위 + 리밸런싱 판정 포함)
                 dim_keys  = ["cognitive_ability","job_expertise","proactiveness","leadership"]
                 dim_names = ["인지","전문성","적극성","리더십"]
@@ -2912,6 +2925,19 @@ with tab_bulk:
                 <div class="section-rule"></div>
             </div>
             """, unsafe_allow_html=True)
+
+            _aok = [b for b in st.session_state["auto_results"] if b.get("success")]
+            _afail = [b for b in st.session_state["auto_results"] if not b.get("success")]
+            st.markdown(
+                f'<div style="display:flex;gap:1.2rem;flex-wrap:wrap;margin-bottom:0.6rem;font-size:0.85rem;">'
+                f'<span>✅ 성공 <b style="color:#2D6A4F;">{len(_aok)}</b>명</span>'
+                f'<span>❌ 실패 <b style="color:#B0392B;">{len(_afail)}</b>명</span>'
+                f'<span style="color:#7A7268;">(성공한 인원만 아카이브·분석 결과 탭에 저장됩니다)</span></div>',
+                unsafe_allow_html=True)
+            if _afail:
+                with st.expander(f"❌ 실패 {len(_afail)}명 · 사유 보기 (재분석 필요)", expanded=True):
+                    for b in _afail:
+                        st.markdown(f"- **{b['name']}** · {b.get('dept','')} → {b.get('error','(사유 미상)')}")
 
             _dimk = ["cognitive_ability", "job_expertise", "proactiveness", "leadership"]
             _dimn = ["인지", "전문성", "적극성", "리더십"]
