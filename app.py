@@ -3200,14 +3200,33 @@ with tab_results:
                 and (not fq.strip() or fq.strip() in d["name"])]
         filt.sort(key=lambda x: x["ov"], reverse=True)
 
-        st.markdown(f'<div style="font-size:0.78rem;color:#7A7268;margin:0.6rem 0;">표시 {len(filt)}명 (종합 점수 순)</div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="font-size:0.78rem;color:#7A7268;margin:0.6rem 0;">표시 {len(filt)}명 (종합 점수 순) · <span style="color:#B0A898;">표 머리글(ⓘ)에 마우스를 올리면 각 항목의 의미·판단 기준이 나타납니다</span></div>', unsafe_allow_html=True)
         _dimk = ["cognitive_ability", "job_expertise", "proactiveness", "leadership"]
-        _dimn = ["인지", "전문성", "적극성", "리더십(역량)"]
         _ree = {"LOW": "🟢", "MEDIUM": "🟡", "HIGH": "🔴", "CRITICAL": "🔴"}.get
         _vee = {"KEEP": "✅", "DEVELOP": "📈", "WATCH": "👁", "MISFIT": "⚠️"}.get
-        _hdr = "| 순위 | 종합 | 이름 | 부서 | 판정 | 조직적합 | 리더십준비 | " + " | ".join(_dimn) + " | 번아웃 | 이직 |"
-        _nc = _hdr.count("|") - 1
-        _tr = [_hdr, "|" + "|".join([":---:"] * _nc) + "|"]
+        _TIP = {
+            "순위": "종합 점수가 높은 순서로 매긴 순위입니다.",
+            "종합": "종합 점수(0~100). 4대 역량(35%) · 조직 적합도(30%) · 리더십 준비도(15%) · 낮은 위험(20%)을 가중 합산한 값입니다. 높을수록 전반적으로 우수합니다.",
+            "이름": "분석 대상자 이름. ⚠️ 표시는 조직 명부(org_data)에 없는 이름이라 조직도에는 카드가 없습니다.",
+            "부서": "소속 본부 / 팀 · 파트.",
+            "판정": "리밸런싱 종합 판정. ✅ KEEP=유지·핵심인재, 📈 DEVELOP=육성 대상, 👁 WATCH=관찰 필요, ⚠️ MISFIT=직무·조직 부적합. 인재상·직무 적합성과 위험을 종합한 결론입니다.",
+            "조직적합": "조직 적합도(0~100). 회사 인재상·문화·직무 요구와의 부합 정도. 70 이상 양호, 50~69 보통, 50 미만 미흡.",
+            "리더십준비": "리더십 준비도(0~100). 리더 역할을 맡을 준비 수준. 80 이상 즉시 가능, 60~79 육성 후 가능, 60 미만 시기상조.",
+            "인지": "인지 역량(0~100). 학습 속도·문제해결·논리적 사고력. 70 이상 우수.",
+            "전문성": "직무 전문성(0~100). 담당 직무의 지식·기술 숙련도. 70 이상 우수.",
+            "적극성": "적극성·주도성(0~100). 능동적 실행·오너십·개선 의지. 70 이상 우수.",
+            "리더십(역량)": "리더십 역량(0~100). 영향력·동기부여·팀 운영 등 현재 발휘하는 역량(준비도와 별개). 70 이상 우수.",
+            "번아웃": "번아웃 위험도. 🟢 LOW 낮음 · 🟡 MEDIUM 주의 · 🔴 HIGH 높음 · 🔴 CRITICAL 심각. HIGH 이상은 소진 신호로 업무량 조정 등 집중관리가 필요합니다.",
+            "이직": "이직 위험도. 현 조직 이탈요인(Push)과 외부 유인(Pull)을 종합. 🟢 LOW · 🟡 MEDIUM · 🔴 HIGH · 🔴 CRITICAL. HIGH 이상은 리텐션(잔류) 조치를 검토하세요.",
+        }
+        def _th(lbl):
+            return (f'<th title="{_TIP.get(lbl, lbl)}" style="padding:7px 8px;border-bottom:2px solid #D4CEC4;'
+                    f'text-align:center;font-size:0.74rem;color:#3D3830;white-space:nowrap;cursor:help;background:#F7F3ED;">'
+                    f'{lbl}<span style="color:#C9A227;font-size:0.62rem;"> ⓘ</span></th>')
+        _cols = ["순위", "종합", "이름", "부서", "판정", "조직적합", "리더십준비",
+                 "인지", "전문성", "적극성", "리더십(역량)", "번아웃", "이직"]
+        _head = "".join(_th(c) for c in _cols)
+        _body = ""
         _rk = 0
         for d in filt:
             R = d["R"]
@@ -3221,9 +3240,22 @@ with tab_results:
             of = R.get("org_fit", {}).get("score", "?")
             lr = R.get("leadership_readiness", {}).get("score", "?")
             ovs = d["ov"] if d["ov"] >= 0 else "-"
-            _orgmark = "" if d["in_org"] else " ⚠️명부외"
-            _tr.append(f"| {_md} | **{ovs}** | **{d['name']}**{_orgmark} | {d['dept']} | {_vee(vd,'⚪')} {vd} | {of} | {lr} | {' | '.join(sc)} | {_ree(bl,'⚪')} | {_ree(tl,'⚪')} |")
-        st.markdown("\n".join(_tr))
+            _orgmark = "" if d["in_org"] else ' <span title="조직 명부에 없는 이름 — 조직도 미표시" style="color:#B0392B;">⚠️</span>'
+            _cells = [
+                _md, f"<b>{ovs}</b>", f"<b>{d['name']}</b>{_orgmark}", (d['dept'] or "-"),
+                f"{_vee(vd,'⚪')} {vd}", str(of), str(lr),
+                sc[0], sc[1], sc[2], sc[3],
+                f"{_ree(bl,'⚪')} {bl}", f"{_ree(tl,'⚪')} {tl}",
+            ]
+            _tds = "".join(
+                f'<td style="padding:6px 8px;border-bottom:1px solid #ECE7DE;text-align:center;'
+                f'font-size:0.76rem;color:#1A1714;white-space:nowrap;">{c}</td>' for c in _cells)
+            _body += f"<tr>{_tds}</tr>"
+        st.markdown(
+            '<div style="overflow-x:auto;border:1px solid #E2DDD4;border-radius:8px;">'
+            '<table style="border-collapse:collapse;width:100%;background:white;">'
+            f'<thead><tr>{_head}</tr></thead><tbody>{_body}</tbody></table></div>',
+            unsafe_allow_html=True)
 
         st.markdown('<div style="font-size:0.72rem;font-weight:700;letter-spacing:1px;color:#B8924A;text-transform:uppercase;margin:1.2rem 0 0.4rem;">본부별 평균 종합점수</div>', unsafe_allow_html=True)
         _bagg = {}
