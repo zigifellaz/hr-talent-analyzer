@@ -634,13 +634,37 @@ def build_user_content(file_data, candidate_name, company_standard):
         text_parts.append(f"[대상자 이름] {candidate_name}")
     if company_standard:
         text_parts.append(f"[회사 인재상]\n{company_standard}")
+    # ── 입력 분량 안전장치 (모델 1회 한도 200K 토큰 초과 방지) ──
+    PER_FILE_CHARS = 60000      # 파일당 최대 글자수
+    TOTAL_TEXT_CHARS = 180000   # 전체 텍스트 최대 글자수 (≈ 안전 토큰 한도 내)
+    MAX_IMAGES = 10             # 이미지 최대 개수
+    _trimmed = False
+    _used = 0
     for label, content in file_data.items():
         if content and not content.startswith("__IMGOBJ__"):
-            text_parts.append(f"[{label}]\n{content}")
+            t = content
+            if len(t) > PER_FILE_CHARS:
+                t = t[:PER_FILE_CHARS] + "\n…(파일 분량 초과로 일부 생략)"
+                _trimmed = True
+            _remain = TOTAL_TEXT_CHARS - _used
+            if _remain <= 0:
+                _trimmed = True
+                continue
+            if len(t) > _remain:
+                t = t[:_remain] + "\n…(전체 분량 초과로 일부 생략)"
+                _trimmed = True
+            _used += len(t)
+            text_parts.append(f"[{label}]\n{t}")
+    if _trimmed:
+        text_parts.append("[알림] 제출 자료 분량이 매우 많아 일부 내용이 자동 축약되었습니다. "
+                           "핵심 자료 위주로 분석되었으니, 정밀 분석이 필요하면 자료를 나눠 다시 분석하세요.")
     if text_parts:
         user_content.append({"type": "text", "text": "\n\n".join(text_parts)})
+    _img_n = 0
     for label, content in file_data.items():
         if content and content.startswith("__IMGOBJ__"):
+            if _img_n >= MAX_IMAGES:
+                break
             try:
                 img = json.loads(content[len("__IMGOBJ__"):])
                 mime_type = img.get("mime", "image/jpeg")
@@ -655,6 +679,7 @@ def build_user_content(file_data, candidate_name, company_standard):
                     "source": {"type": "base64", "media_type": mime_type, "data": b64_data}
                 })
                 user_content.append({"type": "text", "text": f"위 이미지는 [{label}] 자료입니다."})
+                _img_n += 1
             except Exception:
                 pass
     return user_content
@@ -1859,6 +1884,9 @@ def friendly_api_error(e):
     """API 오류를 비전문가용 한글 메시지로 변환."""
     s = str(e)
     low = s.lower()
+    if "prompt is too long" in low or "too long" in low or "maximum" in low and "token" in low:
+        return ("📦 제출 자료 분량이 한 번에 분석할 수 있는 한도를 초과했습니다. 이 대상자의 자료 중 "
+                "용량이 크거나 중복되는 파일을 줄여서 다시 분석해주세요. (자동 축약을 적용해도 초과한 경우입니다.)")
     if "credit balance is too low" in low or "plans & billing" in low or "purchase credits" in low:
         return ("💳 API 크레딧 잔액이 부족합니다. Anthropic Console(console.anthropic.com) → Billing에서 "
                 "크레딧을 충전한 뒤 다시 분석해주세요. (API 사용료는 채팅 구독과 별개로 충전·과금됩니다.)")
@@ -2408,6 +2436,11 @@ with tab_bulk:
 
             # ── 대량 분석 결과 ──
             if st.session_state["bulk_done"] and st.session_state["bulk_results"]:
+                if st.button("🆕  새 분석 시작하기 (목록·결과 비우고 새로 시작)", use_container_width=True, key="b_new_top"):
+                    st.session_state["bulk_list"]    = []
+                    st.session_state["bulk_results"] = []
+                    st.session_state["bulk_done"]    = False
+                    st.rerun()
                 st.markdown("""
                 <div class="section-header" style="margin-top:2rem;">
                     <span class="section-num">03</span>
@@ -2774,6 +2807,7 @@ with tab_bulk:
         if "auto_results" not in st.session_state: st.session_state["auto_results"] = []
         if "auto_done"    not in st.session_state: st.session_state["auto_done"]    = False
         if "auto_excluded" not in st.session_state: st.session_state["auto_excluded"] = set()
+        if "auto_upkey" not in st.session_state: st.session_state["auto_upkey"] = 0
 
         _orgA = load_org_data()
         _doneA = {r.get("candidate_name", "") for r in load_archive() if r.get("candidate_name")}
@@ -2810,7 +2844,7 @@ with tab_bulk:
         auto_files = st.file_uploader(
             "자료 일괄 업로드 (여러 파일 동시 선택)",
             type=["pdf", "docx", "jpg", "jpeg", "png", "webp", "txt", "md"],
-            accept_multiple_files=True, key="auto_uploader")
+            accept_multiple_files=True, key=f"auto_uploader_{st.session_state['auto_upkey']}")
 
         if auto_files and not st.session_state["auto_done"]:
             grouped, unmatched, excluded = {}, [], {}
@@ -2918,6 +2952,12 @@ with tab_bulk:
 
         # ── 자동 분석 결과 ──
         if st.session_state["auto_done"] and st.session_state["auto_results"]:
+            if st.button("🆕  새 분석 시작하기 (현재 결과 비우고 새 자료 업로드)", use_container_width=True, key="auto_new_top"):
+                st.session_state["auto_results"] = []
+                st.session_state["auto_done"] = False
+                st.session_state["auto_excluded"] = set()
+                st.session_state["auto_upkey"] += 1
+                st.rerun()
             st.markdown("""
             <div class="section-header" style="margin-top:1.5rem;">
                 <span class="section-num">03</span>
@@ -2987,6 +3027,7 @@ with tab_bulk:
                 st.session_state["auto_results"] = []
                 st.session_state["auto_done"] = False
                 st.session_state["auto_excluded"] = set()
+                st.session_state["auto_upkey"] += 1
                 st.rerun()
 
 
