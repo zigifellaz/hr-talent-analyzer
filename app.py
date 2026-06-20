@@ -1784,7 +1784,7 @@ company_direction = """※ 회사의 향후 전략 방향을 여기에 입력하
 - 성과 중심·협업 중심의 조직문화 정착"""
 
 # ── 탭 ──
-tab_single, tab_bulk, tab_org, tab_reanalyze = st.tabs(["👤  개인 분석", "👥  대량 분석", "🏢  조직도", "🔬  재검사"])
+tab_single, tab_bulk, tab_org = st.tabs(["👤  개인 분석", "👥  대량 분석", "🏢  조직도"])
 
 
 # ════════════════════════════════════════════════════════
@@ -1799,11 +1799,92 @@ with tab_single:
         <div class="section-rule"></div>
     </div>
     """, unsafe_allow_html=True)
-    c1, c2 = st.columns(2)
-    with c1:
-        candidate_name = st.text_input("성명", value=st.session_state.get("org_prefill_name",""), placeholder="홍길동", key="s_name")
-    with c2:
-        candidate_dept = st.text_input("소속 부서", placeholder="Sales & Marketing Division", key="s_dept")
+    # ── 검사 대상자 선택 (조직 명부 / 직접 입력) ──
+    _org_s = load_org_data()
+    _done_names = {r.get("candidate_name", "") for r in load_archive() if r.get("candidate_name")}
+
+    def _flatten_org(org):
+        out = {}
+        for bonbu, bd in org.items():
+            units = {}
+            bdir = bd.get("_직속", {})
+            dp = bdir.get("_직속", []) if isinstance(bdir, dict) else []
+            if dp:
+                units["(본부 직속)"] = dp
+            for tname, tdict in bd.items():
+                if tname == "_직속":
+                    continue
+                td = tdict.get("_직속", [])
+                if td:
+                    units[tname] = td
+                for pname, plist in tdict.items():
+                    if pname == "_직속":
+                        continue
+                    units[f"{tname} · {pname}"] = plist
+            if units:
+                out[bonbu] = units
+        return out
+
+    s_mode = st.radio("대상자 선택 방식", ["조직 명부에서 선택", "직접 입력"], horizontal=True, key="s_mode")
+    candidate_name = ""
+    candidate_dept = ""
+
+    if s_mode == "조직 명부에서 선택" and _org_s:
+        _flat = _flatten_org(_org_s)
+        _all = [p["name"] for u in _flat.values() for lst in u.values() for p in lst]
+        _tot = len(_all)
+        _dn = sum(1 for n in _all if n in _done_names)
+        st.markdown(
+            f'<div style="display:flex;gap:1.2rem;align-items:center;flex-wrap:wrap;margin-bottom:0.7rem;font-size:0.82rem;color:#7A7268;">'
+            f'<span>전체 <b style="color:#1A1714;">{_tot}</b>명</span>'
+            f'<span>✅ 등록 <b style="color:#2D6A4F;">{_dn}</b></span>'
+            f'<span>⚪ 미등록 <b style="color:#B0A898;">{_tot - _dn}</b></span></div>',
+            unsafe_allow_html=True)
+        pc1, pc2, pc3 = st.columns([1, 1.4, 1.5])
+        with pc1:
+            s_bonbu = st.selectbox("본부", list(_flat.keys()), key="s_bonbu")
+        _units = _flat.get(s_bonbu, {})
+        with pc2:
+            s_unit = st.selectbox("팀 · 파트", list(_units.keys()), key="s_unit") if _units else None
+        _members = _units.get(s_unit, []) if s_unit else []
+        _optmap, _opts = {}, []
+        for p in _members:
+            tag = "✅" if p["name"] in _done_names else "⚪"
+            lab = f'{tag} {p["name"]} · {p.get("pos", "")}'
+            _opts.append(lab)
+            _optmap[lab] = p
+        with pc3:
+            s_pick = st.selectbox("인원 (✅ 등록 / ⚪ 미등록)", _opts, key="s_pick") if _opts else None
+        if s_pick:
+            _ps = _optmap[s_pick]
+            candidate_name = _ps["name"]
+            candidate_dept = f"{s_bonbu} / {s_unit}" if s_unit else s_bonbu
+            _reg = candidate_name in _done_names
+            _badge = ('<span style="color:#2D6A4F;font-weight:700;">✅ 이미 분석 등록됨 — 다시 검사하면 최신 결과로 갱신됩니다</span>'
+                      if _reg else
+                      '<span style="color:#8B6914;font-weight:700;">⚪ 미등록 — 자료를 올려 첫 검사를 진행하세요</span>')
+            st.markdown(
+                f'<div style="background:#FFFFFF;border:1px solid #D4CEC4;border-left:3px solid #B8924A;'
+                f'border-radius:8px;padding:0.7rem 1rem;margin:0.3rem 0 0.2rem;font-size:0.85rem;">'
+                f'선택: <b style="color:#1A1714;">{candidate_name}</b> '
+                f'<span style="color:#7A7268;">· {candidate_dept}</span><br>{_badge}</div>',
+                unsafe_allow_html=True)
+        with st.expander("📋 조직 명부 분석 등록 현황 (전체 보기)"):
+            for bonbu, units in _flat.items():
+                bt = sum(len(l) for l in units.values())
+                bd_ = sum(1 for l in units.values() for p in l if p["name"] in _done_names)
+                st.markdown(f"**{bonbu}** · 등록 {bd_}/{bt}")
+                lines = []
+                for u, lst in units.items():
+                    chips = " ".join(("✅" if p["name"] in _done_names else "⚪") + p["name"] for p in lst)
+                    lines.append(f"- {u} : {chips}")
+                st.markdown("\n".join(lines))
+    else:
+        c1, c2 = st.columns(2)
+        with c1:
+            candidate_name = st.text_input("성명", value=st.session_state.get("org_prefill_name", ""), placeholder="홍길동", key="s_name")
+        with c2:
+            candidate_dept = st.text_input("소속 부서", placeholder="Sales & Marketing Division", key="s_dept")
     company_standard_s = st.text_area("회사 인재상", value=company_standard, height=110, key="s_std")
     core_culture_s     = st.text_area("회사 5대 핵심문화 축", value=core_culture, height=140, key="s_culture")
     company_direction_s = st.text_area("회사 향후 방향성 (방향성 적합도 분석에 사용)", value=company_direction, height=120, key="s_direction")
@@ -1921,7 +2002,7 @@ with tab_single:
                 if not uploaded_files:
                     st.error("⚠️ 최소 1개 이상의 파일을 업로드해야 분석할 수 있습니다.")
                 elif not candidate_name:
-                    st.error("⚠️ 대상자 성명을 입력해주세요.")
+                    st.error("⚠️ 검사할 대상자를 선택(또는 입력)해주세요.")
                 else:
                     with st.spinner("분석 중 — 업로드된 자료를 종합 검토하고 있습니다..."):
                         try:
@@ -1958,8 +2039,8 @@ with tab_bulk:
         <div class="section-rule"></div>
     </div>
     <p style="font-size:0.8rem;color:#7A7268;margin-bottom:1.2rem;">
-        대상자를 한 명씩 등록한 뒤 <b>전체 분석 시작</b> 버튼을 누르면 순차적으로 분석됩니다.
-        분석 완료된 결과는 아카이브에 자동 저장됩니다.
+        조직 명부에서 <b>여러 명을 한 번에 선택</b>해 목록에 담고, 대상자별 자료를 올린 뒤
+        <b>전체 분석 시작</b>을 누르면 순차 분석됩니다. 결과는 아카이브에 자동 저장돼요.
     </p>
     """, unsafe_allow_html=True)
 
@@ -1967,98 +2048,180 @@ with tab_bulk:
     if "bulk_results" not in st.session_state: st.session_state["bulk_results"] = []
     if "bulk_done"    not in st.session_state: st.session_state["bulk_done"]    = False
 
-    # ── 대상자 추가 폼 ──
-    with st.expander("➕  대상자 추가", expanded=not st.session_state["bulk_done"]):
-        ba1, ba2 = st.columns(2)
-        with ba1: b_name = st.text_input("성명 *", placeholder="홍길동", key="b_name")
-        with ba2: b_dept = st.text_input("소속 부서", placeholder="Sales & Marketing Division", key="b_dept")
-        b_files = st.file_uploader(
-            "자료 업로드 (이력서·기안서·MBTI·인적성 등, 여러 파일 동시 선택 가능)",
-            type=["pdf","docx","jpg","jpeg","png","webp","txt","md"],
-            accept_multiple_files=True, key="b_uploader"
-        )
-        if st.button("목록에 추가", use_container_width=True, key="b_add"):
-            if not b_name:
-                st.error("⚠️ 성명을 입력해주세요.")
-            elif not b_files:
-                st.error("⚠️ 파일을 최소 1개 이상 업로드해주세요.")
-            else:
-                fd = {uf.name: read_file_content(uf) for uf in b_files}
-                if b_dept: fd["소속 부서"] = b_dept
-                fd["회사 인재상"]        = company_standard
-                fd["회사 5대 핵심문화 축"] = core_culture
-                fd["회사 향후 방향성"]     = company_direction
-                st.session_state["bulk_list"].append({
-                    "name": b_name, "dept": b_dept,
-                    "file_data": fd, "file_count": len(b_files)
-                })
-                st.success(f"✅ {b_name} 등록 완료 ({len(b_files)}개 파일)")
-                st.rerun()
+    _org_b = load_org_data()
+    _done_b = {r.get("candidate_name", "") for r in load_archive() if r.get("candidate_name")}
 
-    # ── 등록된 목록 ──
+    def _flatten_b(org):
+        out = {}
+        for bonbu, bd in org.items():
+            units = {}
+            bdir = bd.get("_직속", {})
+            dp = bdir.get("_직속", []) if isinstance(bdir, dict) else []
+            if dp:
+                units["(본부 직속)"] = dp
+            for tname, tdict in bd.items():
+                if tname == "_직속":
+                    continue
+                td = tdict.get("_직속", [])
+                if td:
+                    units[tname] = td
+                for pname, plist in tdict.items():
+                    if pname == "_직속":
+                        continue
+                    units[f"{tname} · {pname}"] = plist
+            if units:
+                out[bonbu] = units
+        return out
+
+    # ── 대상자 추가 (조직 명부에서 여러 명 선택) ──
+    with st.expander("➕  조직 명부에서 대상자 추가 (여러 명 선택)", expanded=not st.session_state["bulk_done"]):
+        _existing = {e["name"] for e in st.session_state["bulk_list"]}
+        if _org_b:
+            _flatb = _flatten_b(_org_b)
+            bc1, bc2 = st.columns([1, 1.6])
+            with bc1:
+                bb = st.selectbox("본부", list(_flatb.keys()), key="b_bonbu")
+            _bunits = _flatb.get(bb, {})
+            with bc2:
+                bu = st.selectbox("팀 · 파트", ["(본부 전체)"] + list(_bunits.keys()), key="b_unit")
+            if bu == "(본부 전체)":
+                _cands = [(p, u) for u, lst in _bunits.items() for p in lst]
+            else:
+                _cands = [(p, bu) for p in _bunits.get(bu, [])]
+            _omap, _oo = {}, []
+            for p, u in _cands:
+                tag = "✅" if p["name"] in _done_b else "⚪"
+                inlist = " · 이미 목록" if p["name"] in _existing else ""
+                lab = f'{tag} {p["name"]} · {p.get("pos", "")}{inlist}'
+                _oo.append(lab)
+                _omap[lab] = (p, u)
+            picks = st.multiselect("인원 선택 (여러 명 가능 · ✅ 등록 / ⚪ 미등록)", _oo, key="b_multi")
+            if st.button("선택 인원 목록에 추가", use_container_width=True, key="b_add"):
+                added = 0
+                cur = {e["name"] for e in st.session_state["bulk_list"]}
+                for lab in picks:
+                    p, u = _omap[lab]
+                    if p["name"] in cur:
+                        continue
+                    st.session_state["bulk_list"].append({
+                        "name": p["name"],
+                        "dept": (f"{bb} / {u}" if u != "(본부 전체)" else bb),
+                        "file_data": {}, "file_count": 0
+                    })
+                    cur.add(p["name"])
+                    added += 1
+                if added:
+                    st.success(f"✅ {added}명 목록에 추가됨")
+                    st.rerun()
+                else:
+                    st.warning("새로 추가할 인원을 선택해주세요(이미 목록에 있는 인원은 제외됩니다).")
+        else:
+            st.info("org_data.json이 없어 명부 선택을 사용할 수 없어요. 아래 직접 입력을 이용하세요.")
+
+        st.markdown('<div style="height:0.3rem;"></div>', unsafe_allow_html=True)
+        with st.expander("✏️ 직접 입력으로 추가 (명부에 없는 경우)"):
+            mc1, mc2 = st.columns(2)
+            with mc1: man_name = st.text_input("성명", key="b_manname")
+            with mc2: man_dept = st.text_input("소속", key="b_mandept")
+            if st.button("이 인원 추가", key="b_manadd"):
+                if not man_name:
+                    st.error("성명을 입력해주세요.")
+                elif man_name in {e["name"] for e in st.session_state["bulk_list"]}:
+                    st.warning("이미 목록에 있습니다.")
+                else:
+                    st.session_state["bulk_list"].append({"name": man_name, "dept": man_dept, "file_data": {}, "file_count": 0})
+                    st.success(f"✅ {man_name} 추가됨")
+                    st.rerun()
+
+    # ── 등록된 목록 · 대상자별 자료 업로드 ──
     if st.session_state["bulk_list"]:
         st.markdown("""
         <div class="section-header" style="margin-top:1.5rem;">
             <span class="section-num">02</span>
-            <span class="section-title">등록된 대상자 목록</span>
+            <span class="section-title">등록된 대상자 · 자료 업로드</span>
             <div class="section-rule"></div>
         </div>
+        <p style="font-size:0.76rem;color:#7A7268;margin-bottom:0.8rem;">
+            각 대상자에 자료(이력서·기안서·MBTI·인적성·SNS 등)를 올려주세요. 자료가 없는 대상자는 분석에서 제외됩니다.
+        </p>
         """, unsafe_allow_html=True)
 
+        pending_files = {}
         for i, cand in enumerate(st.session_state["bulk_list"]):
-            done = i < len(st.session_state["bulk_results"])
-            lc1, lc2, lc3 = st.columns([4, 2, 1])
+            done = i < len(st.session_state["bulk_results"]) and st.session_state["bulk_results"][i].get("success")
+            reg = "✅" if cand["name"] in _done_b else "⚪"
+            lc1, lc2 = st.columns([5, 1])
             with lc1:
+                stat = "✅ 분석 완료" if done else "⏳ 대기"
                 st.markdown(f"""
                 <div style="background:white;border:1px solid #D4CEC4;border-radius:6px;
-                            padding:0.7rem 1rem;border-left:3px solid {'#2D6A4F' if done else '#B8924A'};">
-                    <b style="font-size:0.9rem;color:#1A1714;">{cand['name']}</b>
-                    <span style="font-size:0.75rem;color:#7A7268;margin-left:0.6rem;">{cand.get('dept','')}</span>
-                    <span style="font-size:0.7rem;color:#B0A898;margin-left:0.6rem;">{cand['file_count']}개 파일</span>
+                            padding:0.6rem 1rem;border-left:3px solid {'#2D6A4F' if done else '#B8924A'};">
+                    <span style="font-size:0.95rem;">{reg}</span>
+                    <b style="font-size:0.9rem;color:#1A1714;margin-left:0.3rem;">{cand['name']}</b>
+                    <span style="font-size:0.74rem;color:#7A7268;margin-left:0.6rem;">{cand.get('dept','')}</span>
+                    <span style="font-size:0.72rem;color:#B0A898;margin-left:0.6rem;">{stat}</span>
                 </div>
                 """, unsafe_allow_html=True)
             with lc2:
-                status = "✅ 분석 완료" if done else "⏳ 대기 중"
-                st.markdown(f'<p style="font-size:0.75rem;color:#7A7268;padding:0.85rem 0;">{status}</p>', unsafe_allow_html=True)
-            with lc3:
                 if not st.session_state["bulk_done"]:
                     if st.button("삭제", key=f"bdel_{i}", use_container_width=True):
                         st.session_state["bulk_list"].pop(i)
                         if i < len(st.session_state["bulk_results"]):
                             st.session_state["bulk_results"].pop(i)
                         st.rerun()
+            if not st.session_state["bulk_done"]:
+                up = st.file_uploader(
+                    f"{cand['name']} 자료",
+                    type=["pdf", "docx", "jpg", "jpeg", "png", "webp", "txt", "md"],
+                    accept_multiple_files=True, key=f"bup_{cand['name']}",
+                    label_visibility="collapsed"
+                )
+                pending_files[i] = up
+                st.caption(f"📎 {cand['name']} — {len(up) if up else 0}개 업로드됨")
 
-        st.markdown('<div style="height:1rem;"></div>', unsafe_allow_html=True)
+        st.markdown('<div style="height:0.8rem;"></div>', unsafe_allow_html=True)
 
         # ── 전체 분석 시작 ──
         if not st.session_state["bulk_done"]:
-            total = len(st.session_state["bulk_list"])
-            if st.button(f"◈  전체 {total}명 분석 시작", use_container_width=True, key="b_run"):
-                st.session_state["bulk_results"] = []
-                prog = st.progress(0, text="분석 준비 중...")
-                for i, cand in enumerate(st.session_state["bulk_list"]):
-                    prog.progress(i / total, text=f"({i+1}/{total}) {cand['name']} 분석 중...")
-                    try:
-                        R = analyze_candidate(api_key, cand["file_data"], cand["name"], company_standard)
-                        st.session_state["bulk_results"].append({
-                            "name": cand["name"], "dept": cand.get("dept",""),
-                            "result": R, "success": True
-                        })
-                        save_to_archive({
-                            "saved_at":       datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                            "candidate_name": cand["name"],
-                            "dept":           cand.get("dept",""),
-                            "result":         R
-                        })
-                    except Exception as e:
-                        st.session_state["bulk_results"].append({
-                            "name": cand["name"], "dept": cand.get("dept",""),
-                            "result": {}, "success": False, "error": str(e)
-                        })
-                    prog.progress((i + 1) / total, text=f"({i+1}/{total}) {cand['name']} 완료")
-                prog.progress(1.0, text=f"✅ 전체 {total}명 분석 완료!")
-                st.session_state["bulk_done"] = True
-                st.rerun()
+            _ready = sum(1 for i in pending_files if pending_files[i])
+            if st.button(f"◈  전체 분석 시작 (자료 등록 {_ready}명)", use_container_width=True, key="b_run"):
+                if _ready == 0:
+                    st.error("⚠️ 자료가 업로드된 대상자가 없습니다. 각 대상자에 자료를 올려주세요.")
+                else:
+                    st.session_state["bulk_results"] = []
+                    n_t = len(st.session_state["bulk_list"])
+                    prog = st.progress(0, text="분석 준비 중...")
+                    for k, cand in enumerate(st.session_state["bulk_list"]):
+                        prog.progress(k / n_t, text=f"({k+1}/{n_t}) {cand['name']} ...")
+                        ups = pending_files.get(k)
+                        if not ups:
+                            st.session_state["bulk_results"].append({
+                                "name": cand["name"], "dept": cand.get("dept", ""),
+                                "result": {}, "success": False, "error": "자료 미업로드"})
+                            prog.progress((k + 1) / n_t)
+                            continue
+                        try:
+                            fd = {uf.name: read_file_content(uf) for uf in ups}
+                            if cand.get("dept"): fd["소속 부서"] = cand["dept"]
+                            fd["회사 인재상"] = company_standard
+                            fd["회사 5대 핵심문화 축"] = core_culture
+                            fd["회사 향후 방향성"] = company_direction
+                            R = analyze_candidate(api_key, fd, cand["name"], company_standard)
+                            st.session_state["bulk_results"].append({
+                                "name": cand["name"], "dept": cand.get("dept", ""),
+                                "result": R, "success": True})
+                            save_to_archive({
+                                "saved_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                "candidate_name": cand["name"], "dept": cand.get("dept", ""),
+                                "result": R})
+                        except Exception as e:
+                            st.session_state["bulk_results"].append({
+                                "name": cand["name"], "dept": cand.get("dept", ""),
+                                "result": {}, "success": False, "error": str(e)})
+                        prog.progress((k + 1) / n_t, text=f"({k+1}/{n_t}) {cand['name']} 완료")
+                    prog.progress(1.0, text="✅ 분석 완료!")
+                    st.session_state["bulk_done"] = True
+                    st.rerun()
 
         # ── 대량 분석 결과 ──
         if st.session_state["bulk_done"] and st.session_state["bulk_results"]:
@@ -2692,10 +2855,8 @@ with tab_org:
         .m-empty .ds { font-size:0.85rem; color:#7A7268; line-height:1.6; }
         .light { cursor:pointer; }
         .pcard:hover .light { transform:scale(1.45); transition:transform .12s; }
-        .m-gobtn { display:block; width:100%; margin-top:0.4rem; padding:0.85rem 1.1rem;
-                   background:#1A1714; color:#F7F3ED; border:none; border-radius:8px;
-                   font-size:0.85rem; font-weight:700; cursor:pointer; }
-        .m-gobtn:hover { background:#2B3D5C; }
+        .m-note { font-size:0.78rem; color:#7A7268; line-height:1.6; margin-top:0.5rem;
+                  padding:0.7rem 1rem; background:#F2EEE6; border-radius:8px; }
         </style></head><body>
         <div id="viewport">
             <div id="canvas">__ORG_HTML__</div>
@@ -2750,8 +2911,7 @@ with tab_org:
                   +'<div class="m-name">'+name+'</div></div>'
                   +'<div class="m-body"><div class="m-empty"><div class="ic">📭</div>'
                   +'<div class="ttl">분석 결과가 없습니다 · 자료 미등록</div>'
-                  +'<div class="ds">'+name+' 님은 아직 분석 데이터가 없습니다.<br>재검사 탭에서 자료를 올려 분석을 진행하세요.</div>'
-                  +'<button class="m-gobtn" onclick="goReanalyze()" style="max-width:300px;margin:1.1rem auto 0;">🔬 재검사 탭으로 이동 →</button>'
+                  +'<div class="ds">'+name+' 님은 아직 분석 데이터가 없습니다.<br><b>‘개인 분석’ 탭</b>에서 이 직원을 선택해 검사를 진행하세요.</div>'
                   +'</div></div>';
             } else {
                 const vs=V_STYLE[d.verdict]||["#7A7268","#EDE8E0",d.verdict];
@@ -2795,20 +2955,12 @@ with tab_org:
                   +'<div class="m-sec"><div class="h">프로필</div><div class="t">'
                     +(function(){var a=[['전공',d.major],['대학',d.univ],['학력',d.edu],['출신지역',d.region]].filter(x=>x[1]&&x[1]!='자료 미제공'&&x[1]!='-');return a.length?a.map(x=>'<b>'+x[0]+'</b> '+x[1]).join(' &nbsp;·&nbsp; '):'<span style="color:#B0A898;">프로필 자료 미확인</span>';})()
                     +'</div></div>'
-                  +'<button class="m-gobtn" onclick="goReanalyze()">🔬 재검사 탭에서 재분석하기 →</button>'
+                  +'<div class="m-note">자료를 추가해 다시 검사하려면 <b>‘개인 분석’ 탭</b>에서 이 직원을 선택해 진행하세요.</div>'
                   +'</div>';
             }
             document.getElementById('overlay').style.display='flex';
         }
         function closeModal(){ document.getElementById('overlay').style.display='none'; }
-        function goReanalyze(){
-            try{
-                var btns=window.parent.document.querySelectorAll('button[role="tab"]');
-                for(var i=0;i<btns.length;i++){ var t=btns[i].innerText||''; if(t.indexOf('재검사')>=0){ btns[i].click(); break; } }
-                window.parent.scrollTo({top:0,behavior:'smooth'});
-            }catch(e){}
-            closeModal();
-        }
         apply();
         </script>
         </body></html>
@@ -2816,96 +2968,6 @@ with tab_org:
         org_chart_html = org_chart_html.replace("__ORG_HTML__", org_html).replace("__PDATA__", pdata_json)
         components.html(org_chart_html, height=870, scrolling=False)
 
-
-
-# ════════════════════════════════════════════════════════
-#  TAB 4 — 재검사 (자료 추가 후 재분석)
-# ════════════════════════════════════════════════════════
-with tab_reanalyze:
-    st.markdown("""
-    <div class="section-header">
-        <span class="section-num">🔬</span>
-        <span class="section-title">재검사 · 자료 추가 후 재분석</span>
-        <div class="section-rule"></div>
-    </div>
-    <p style="font-size:0.8rem;color:#7A7268;margin-bottom:1rem;">
-        직원을 선택하면 <b>제출 서류 리스트 · 상세 분석 결과지</b>를 확인하고, 자료를 추가해 <b>그 자리에서 재검사</b>할 수 있어요.
-        결과는 조직도 신호등에 자동 반영됩니다. (조직도에서 카드를 클릭해 뜨는 창의 <b>‘재검사 탭으로 이동’</b> 버튼으로도 올 수 있어요.)
-    </p>
-    """, unsafe_allow_html=True)
-
-    _orgr = load_org_data()
-    _arch = load_archive()
-    _abn = {}
-    for _rec in _arch:
-        _nm = _rec.get("candidate_name", "")
-        if _nm and _nm not in _abn:
-            _abn[_nm] = _rec
-    if _orgr:
-        _roster = sorted({p["name"] for div in _orgr.values() for team in div.values()
-                          for ppl in team.values() for p in ppl})
-    else:
-        _roster = sorted(_abn.keys())
-
-    if not _roster:
-        st.info("조직 데이터가 없어요. org_data.json을 업로드하면 직원 목록이 나타납니다.")
-    else:
-        rsel = st.selectbox("직원 선택", ["— 선택 —"] + _roster, key="reanalyze_sel")
-        if rsel and rsel != "— 선택 —":
-            rs, rc, _ = get_person_status(rsel, _abn)
-            rlabel = {"none": "자료 미등록", "green": "정상", "yellow": "번아웃 초기", "red": "집중관리 필요"}.get(rs, "")
-            st.markdown(
-                f'<div style="display:flex;align-items:center;gap:8px;margin:0.3rem 0 0.8rem;">'
-                f'<span style="width:11px;height:11px;border-radius:50%;background:{rc};box-shadow:0 0 5px {rc};display:inline-block;"></span>'
-                f'<b style="font-size:1.05rem;color:#1A1714;">{rsel}</b>'
-                f'<span style="font-size:0.78rem;color:#7A7268;">· {rlabel}</span></div>',
-                unsafe_allow_html=True)
-
-            rrec = _abn.get(rsel)
-            if rrec and rrec.get("result"):
-                RR = rrec["result"]
-                _mats = RR.get("data_coverage", {}).get("materials", [])
-                _conf = RR.get("data_coverage", {}).get("confidence", "")
-                _mh = "".join(
-                    f'<span style="display:inline-block;background:#F2EEE6;border:1px solid #E2DDD4;border-radius:5px;padding:2px 9px;margin:2px;font-size:0.74rem;color:#3D3830;">{m}</span>'
-                    for m in _mats
-                ) or '<span style="color:#B0A898;font-size:0.78rem;">기록된 제출 자료 없음 (이전 분석은 자료 목록을 저장하지 않았을 수 있어요)</span>'
-                st.markdown(
-                    f'<div style="background:white;border:1px solid #D4CEC4;border-radius:8px;padding:1rem 1.3rem;margin-bottom:0.6rem;">'
-                    f'<div style="font-size:0.7rem;font-weight:700;letter-spacing:1px;color:#B8924A;text-transform:uppercase;margin-bottom:0.5rem;">'
-                    f'📄 제출 자료 · 서류 리스트{(" · 근거 신뢰도 " + _conf) if _conf else ""}</div><div>{_mh}</div></div>',
-                    unsafe_allow_html=True)
-                with st.expander("📑 상세 분석 결과지 펼치기", expanded=False):
-                    render_result(RR, rsel)
-            else:
-                st.info(f"{rsel} 님은 아직 분석 데이터가 없어요. 자료를 올려 첫 분석을 진행하세요.")
-
-            _files = st.file_uploader(
-                "자료 업로드 (이력서·기안서·MBTI·인적성·SNS 등, 여러 개 가능)",
-                type=["pdf", "docx", "jpg", "jpeg", "png", "webp", "txt", "md"],
-                accept_multiple_files=True, key=f"re_up_{rsel}")
-            st.caption("※ 업로드한 자료로 새로 분석하며, 기존 결과는 최신 결과로 갱신됩니다.")
-            if st.button("🔬 재검사 실행", use_container_width=True, key=f"re_btn_{rsel}"):
-                if not _files:
-                    st.error("⚠️ 분석할 자료를 1개 이상 업로드해주세요.")
-                else:
-                    with st.spinner(f"{rsel} 재검사 중 — 업로드한 자료를 종합 검토하고 있습니다..."):
-                        try:
-                            _fd = {uf.name: read_file_content(uf) for uf in _files}
-                            _fd["회사 인재상"] = company_standard
-                            _fd["회사 5대 핵심문화 축"] = core_culture
-                            _fd["회사 향후 방향성"] = company_direction
-                            _Rnew = analyze_candidate(api_key, _fd, rsel, company_standard)
-                            save_to_archive({
-                                "saved_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                                "candidate_name": rsel,
-                                "dept": rrec.get("dept", "") if rrec else "",
-                                "result": _Rnew,
-                            })
-                            st.success(f"✅ {rsel} 재검사 완료! 조직도 신호등과 결과지가 갱신됩니다.")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"재검사 오류: {str(e)[:160]}")
 
 
 # ── Footer ──
