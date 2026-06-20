@@ -1783,6 +1783,77 @@ company_direction = """※ 회사의 향후 전략 방향을 여기에 입력하
 - 데이터·디지털 기반 품질·생산 고도화
 - 성과 중심·협업 중심의 조직문화 정착"""
 
+# ── 8대 표준 분석자료 ──
+STANDARD_MATERIALS = [
+    "이력서", "포트폴리오", "다면평가 결과", "기안서",
+    "MBTI 결과", "인적성 검사", "SNS", "기타자료",
+]
+# 항목별 파일명 키워드 (위에서부터 우선 매칭)
+MATERIAL_KEYWORDS = {
+    "이력서": ["이력서", "resume", "cv", "경력기술", "자기소개", "자소서", "프로필", "profile"],
+    "포트폴리오": ["포트폴리오", "portfolio", "작품", "성과물"],
+    "다면평가 결과": ["다면평가", "다면", "360", "동료평가", "peer", "리뷰", "review"],
+    "기안서": ["기안", "품의", "제안서", "보고서", "기획서", "draft", "proposal"],
+    "MBTI 결과": ["mbti", "엠비티아이", "성격유형", "16personalities"],
+    "인적성 검사": ["인적성", "적성검사", "인성검사", "적성", "인성", "aptitude", "assessment"],
+    "SNS": ["sns", "인스타", "instagram", "facebook", "페북", "블로그", "blog",
+            "linkedin", "링크드인", "트위터", "twitter", "유튜브", "youtube", "틱톡", "tiktok"],
+}
+
+def classify_material(filename):
+    """파일명을 8대 표준 자료 항목 중 하나로 분류."""
+    low = (filename or "").lower()
+    for cat, kws in MATERIAL_KEYWORDS.items():
+        for kw in kws:
+            if kw.lower() in low:
+                return cat
+    return "기타자료"
+
+def coverage_from_filenames(filenames):
+    """파일명 리스트 → 충족된 표준 자료 항목 set."""
+    covered = set()
+    for fn in filenames or []:
+        covered.add(classify_material(fn))
+    return covered
+
+def material_checklist_html(covered, title="8대 표준 분석자료 충족 현황"):
+    """충족 현황을 8개 칩으로 표시하는 HTML."""
+    covered = set(covered or [])
+    chips = []
+    for m in STANDARD_MATERIALS:
+        on = m in covered
+        chips.append(
+            f'<span style="display:inline-flex;align-items:center;gap:5px;'
+            f'background:{"#E6F2EA" if on else "#F2EEE6"};'
+            f'border:1px solid {"#9CCBB0" if on else "#E2DDD4"};'
+            f'border-radius:6px;padding:3px 10px;margin:3px;font-size:0.76rem;'
+            f'color:{"#1E5C3A" if on else "#B0A898"};font-weight:{700 if on else 500};">'
+            f'{"✅" if on else "⚪"} {m}</span>'
+        )
+    cnt = len([m for m in STANDARD_MATERIALS if m in covered])
+    return (
+        f'<div style="background:white;border:1px solid #D4CEC4;border-radius:8px;padding:0.8rem 1rem;margin:0.4rem 0;">'
+        f'<div style="font-size:0.72rem;font-weight:700;letter-spacing:1px;color:#B8924A;'
+        f'text-transform:uppercase;margin-bottom:0.5rem;">📋 {title} · {cnt}/8</div>'
+        f'<div>{"".join(chips)}</div></div>'
+    )
+
+def material_chips_inline(covered):
+    """인원별 컴팩트 충족 표시 (8개 작은 칩)."""
+    covered = set(covered or [])
+    parts = []
+    for m in STANDARD_MATERIALS:
+        on = m in covered
+        parts.append(
+            f'<span style="font-size:0.66rem;padding:1px 6px;border-radius:4px;margin:1px;display:inline-block;'
+            f'background:{"#E6F2EA" if on else "#F4F1EB"};color:{"#1E5C3A" if on else "#C0BCB4"};'
+            f'border:1px solid {"#9CCBB0" if on else "#E8E3DA"};">{("✓ " if on else "") + m}</span>'
+        )
+    cnt = len([m for m in STANDARD_MATERIALS if m in covered])
+    return (f'<div style="margin:3px 0 7px;">'
+            f'<span style="font-size:0.68rem;color:#7A7268;font-weight:700;margin-right:4px;">📋 충족 {cnt}/8</span>'
+            f'{"".join(parts)}</div>')
+
 # ── 탭 ──
 tab_single, tab_bulk, tab_org = st.tabs(["👤  개인 분석", "👥  대량 분석", "🏢  조직도"])
 
@@ -1897,20 +1968,15 @@ with tab_single:
         <div class="section-rule"></div>
     </div>
     """, unsafe_allow_html=True)
-    st.markdown("""
+    st.markdown(("""
     <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;padding:1.2rem 1.5rem;margin-bottom:1rem;">
-        <p style="font-size:0.8rem;font-weight:600;color:#1A1714;margin-bottom:0.6rem;">📎 아래 자료를 한꺼번에 선택해서 업로드하세요</p>
-        <div style="display:flex;flex-wrap:wrap;gap:0.4rem 2rem;">
-            <span style="font-size:0.75rem;color:#7A7268;">✦ 이력서 / 자기소개서</span>
-            <span style="font-size:0.75rem;color:#7A7268;">✦ 다면평가 결과</span>
-            <span style="font-size:0.75rem;color:#7A7268;">✦ 대상자 작성 기안서</span>
-            <span style="font-size:0.75rem;color:#7A7268;">✦ MBTI 결과 (스크린샷 가능)</span>
-            <span style="font-size:0.75rem;color:#7A7268;">✦ 인적성 검사 결과표</span>
-            <span style="font-size:0.75rem;color:#7A7268;">✦ SNS / 포트폴리오</span>
-        </div>
-        <p style="font-size:0.7rem;color:#B0A898;margin-top:0.8rem;margin-bottom:0;">PDF · DOCX · JPG · PNG · TXT 지원</p>
+        <p style="font-size:0.8rem;font-weight:600;color:#1A1714;margin-bottom:0.6rem;">📎 분석에 활용되는 8대 표준 자료 — 아래 항목을 한꺼번에 선택해서 업로드하세요</p>
+        <div style="display:flex;flex-wrap:wrap;gap:0.4rem 1.6rem;">"""
+        + "".join(f'<span style="font-size:0.75rem;color:#7A7268;">✦ {i+1}. {m}</span>' for i, m in enumerate(STANDARD_MATERIALS))
+        + """</div>
+        <p style="font-size:0.7rem;color:#B0A898;margin-top:0.8rem;margin-bottom:0;">PDF · DOCX · JPG · PNG · TXT 지원 · 파일명에 자료 종류(예: 홍길동_이력서, 홍길동_MBTI)를 넣으면 충족 항목이 자동 인식됩니다</p>
     </div>
-    """, unsafe_allow_html=True)
+    """), unsafe_allow_html=True)
     uploaded_files = st.file_uploader(
         "파일을 여기에 끌어다 놓거나 클릭해서 선택하세요 (여러 파일 동시 선택 가능)",
         type=["pdf","docx","jpg","jpeg","png","webp","txt","md"],
@@ -1921,6 +1987,11 @@ with tab_single:
         st.markdown(f'<p style="font-size:0.78rem;color:#2D6A4F;margin:0.5rem 0;">✅ {len(uploaded_files)}개 파일 업로드 완료</p>', unsafe_allow_html=True)
         for uf in uploaded_files:
             file_data[uf.name] = read_file_content(uf)
+        # 8대 표준 자료 충족 현황 (파일명 기반 자동 인식)
+        _cov_s = coverage_from_filenames([uf.name for uf in uploaded_files])
+        st.markdown(material_checklist_html(_cov_s), unsafe_allow_html=True)
+    else:
+        st.markdown(material_checklist_html(set()), unsafe_allow_html=True)
     if candidate_dept:        file_data["소속 부서"]            = candidate_dept
     if company_standard_s:    file_data["회사 인재상"]           = company_standard_s
     if core_culture_s:        file_data["회사 5대 핵심문화 축"]   = core_culture_s
@@ -2007,6 +2078,7 @@ with tab_single:
                     with st.spinner("분석 중 — 업로드된 자료를 종합 검토하고 있습니다..."):
                         try:
                             R = analyze_candidate(api_key, file_data, candidate_name, company_standard_s)
+                            R["material_coverage"] = sorted(coverage_from_filenames([uf.name for uf in uploaded_files]))
                             record = {
                                 "saved_at":       datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                                 "candidate_name": candidate_name or "이름 없음",
@@ -2220,9 +2292,11 @@ with tab_bulk:
                 <div class="section-rule"></div>
             </div>
             <p style="font-size:0.76rem;color:#7A7268;margin-bottom:0.8rem;">
-                각 대상자에 자료(이력서·기안서·MBTI·인적성·SNS 등)를 올려주세요. 자료가 없는 대상자는 분석에서 제외됩니다.
+                각 대상자에 8대 표준 자료(이력서·포트폴리오·다면평가·기안서·MBTI·인적성·SNS·기타)를 올려주세요.
+                파일명에 자료 종류를 넣으면 충족 항목이 자동 인식됩니다. 자료가 없는 대상자는 분석에서 제외됩니다.
             </p>
             """, unsafe_allow_html=True)
+            st.markdown(material_checklist_html(set(), title="8대 표준 분석자료 항목"), unsafe_allow_html=True)
 
             pending_files = {}
             for i, cand in enumerate(st.session_state["bulk_list"]):
@@ -2256,6 +2330,8 @@ with tab_bulk:
                     )
                     pending_files[i] = up
                     st.caption(f"📎 {cand['name']} — {len(up) if up else 0}개 업로드됨")
+                    _cov_b = coverage_from_filenames([u.name for u in up]) if up else set()
+                    st.markdown(material_chips_inline(_cov_b), unsafe_allow_html=True)
 
             st.markdown('<div style="height:0.8rem;"></div>', unsafe_allow_html=True)
 
@@ -2285,6 +2361,7 @@ with tab_bulk:
                                 fd["회사 5대 핵심문화 축"] = core_culture
                                 fd["회사 향후 방향성"] = company_direction
                                 R = analyze_candidate(api_key, fd, cand["name"], company_standard)
+                                R["material_coverage"] = sorted(coverage_from_filenames([uf.name for uf in ups]))
                                 st.session_state["bulk_results"].append({
                                     "name": cand["name"], "dept": cand.get("dept", ""),
                                     "result": R, "success": True})
@@ -2723,6 +2800,7 @@ with tab_bulk:
                 tag = "✅" if nm in _doneA else "⚪"
                 dept = _deptA.get(nm, "(명부 외)")
                 fnames = " · ".join(f.name for f in fs)
+                _cov_a = coverage_from_filenames([f.name for f in fs])
                 st.markdown(
                     f'<div style="background:white;border:1px solid #D4CEC4;border-radius:6px;'
                     f'padding:0.6rem 1rem;border-left:3px solid #B8924A;margin-bottom:0.45rem;">'
@@ -2730,7 +2808,8 @@ with tab_bulk:
                     f'<b style="font-size:0.92rem;color:#1A1714;">{nm}</b> '
                     f'<span style="font-size:0.74rem;color:#7A7268;">· {dept}</span> '
                     f'<span style="font-size:0.74rem;color:#2D6A4F;font-weight:700;">· {len(fs)}개 자료</span>'
-                    f'<div style="font-size:0.72rem;color:#B0A898;margin-top:0.25rem;">📎 {fnames}</div></div>',
+                    f'<div style="font-size:0.72rem;color:#B0A898;margin-top:0.25rem;">📎 {fnames}</div>'
+                    f'{material_chips_inline(_cov_a)}</div>',
                     unsafe_allow_html=True)
 
             if unmatched:
@@ -2757,6 +2836,7 @@ with tab_bulk:
                             fd["회사 5대 핵심문화 축"] = core_culture
                             fd["회사 향후 방향성"] = company_direction
                             R = analyze_candidate(api_key, fd, nm, company_standard)
+                            R["material_coverage"] = sorted(coverage_from_filenames([f.name for f in grouped[nm]]))
                             st.session_state["auto_results"].append({"name": nm, "dept": dept, "result": R, "success": True})
                             save_to_archive({"saved_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                                              "candidate_name": nm, "dept": dept, "result": R})
@@ -2938,6 +3018,7 @@ with tab_org:
                                 "univ": R.get("profile", {}).get("university", ""),
                                 "edu": R.get("profile", {}).get("education_level", ""),
                                 "region": R.get("profile", {}).get("region", ""),
+                                "mat_cov": R.get("material_coverage", []),
                             }
                         else:
                             person_data[nm] = {"has": False}
@@ -3140,6 +3221,7 @@ with tab_org:
         </div>
         <script>
         const PDATA = __PDATA__;
+        const STD_MAT = __STDMAT__;
         let scale=0.7, tx=0, ty=0, panning=false, sx=0, sy=0;
         const vp=document.getElementById('viewport');
         const cv=document.getElementById('canvas');
@@ -3220,6 +3302,9 @@ with tab_org:
                     +((d.materials&&d.materials.length)?d.materials.map(x=>'<span class="m-tag">'+x+'</span>').join(''):'<span style="color:#B0A898;">기록된 제출 자료 없음</span>')
                     +(d.cov_conf?'<div style="margin-top:7px;font-size:0.78rem;color:#7A7268;">근거 신뢰도 <b>'+d.cov_conf+'</b>'+(d.cov_note?' · '+d.cov_note:'')+'</div>':'')
                     +'</div></div>'
+                  +'<div class="m-sec"><div class="h">8대 표준 분석자료 충족 현황 ('+((d.mat_cov||[]).length)+'/8)</div><div class="t">'
+                    +STD_MAT.map(function(x){var on=(d.mat_cov||[]).indexOf(x)>=0;return '<span style="display:inline-flex;align-items:center;gap:4px;border-radius:6px;padding:3px 9px;margin:2px;font-size:0.76rem;background:'+(on?'#E6F2EA':'#F2EEE6')+';border:1px solid '+(on?'#9CCBB0':'#E2DDD4')+';color:'+(on?'#1E5C3A':'#B0A898')+';font-weight:'+(on?'700':'500')+';">'+(on?'✅':'⚪')+' '+x+'</span>';}).join('')
+                    +'</div></div>'
                   +'<div class="m-sec"><div class="h">프로필</div><div class="t">'
                     +(function(){var a=[['전공',d.major],['대학',d.univ],['학력',d.edu],['출신지역',d.region]].filter(x=>x[1]&&x[1]!='자료 미제공'&&x[1]!='-');return a.length?a.map(x=>'<b>'+x[0]+'</b> '+x[1]).join(' &nbsp;·&nbsp; '):'<span style="color:#B0A898;">프로필 자료 미확인</span>';})()
                     +'</div></div>'
@@ -3233,7 +3318,7 @@ with tab_org:
         </script>
         </body></html>
         """
-        org_chart_html = org_chart_html.replace("__ORG_HTML__", org_html).replace("__PDATA__", pdata_json)
+        org_chart_html = org_chart_html.replace("__ORG_HTML__", org_html).replace("__PDATA__", pdata_json).replace("__STDMAT__", json.dumps(STANDARD_MATERIALS, ensure_ascii=False))
         components.html(org_chart_html, height=870, scrolling=False)
 
 
