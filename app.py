@@ -1061,8 +1061,8 @@ def load_archive() -> list:
     if url and key:
         try:
             r = req.get(
-                f"{url}/rest/v1/{SUPABASE_TABLE}?order=created_at.desc&limit=200",
-                headers=_sb_headers(key), timeout=5
+                f"{url}/rest/v1/{SUPABASE_TABLE}?order=created_at.desc&limit=1000",
+                headers=_sb_headers(key), timeout=8
             )
             if r.status_code == 200:
                 rows = r.json()
@@ -1093,22 +1093,23 @@ def save_to_archive(record: dict):
     import requests as req
     url, key = _get_supabase()
     if url and key:
-        try:
-            payload = {
-                "saved_at":       record.get("saved_at", ""),
-                "candidate_name": record.get("candidate_name", ""),
-                "dept":           record.get("dept", ""),
-                "result_json":    json.dumps(record.get("result", {}), ensure_ascii=False)
-            }
-            r = req.post(
-                f"{url}/rest/v1/{SUPABASE_TABLE}",
-                headers=_sb_headers(key),
-                json=payload, timeout=5
-            )
-            if r.status_code in (200, 201):
-                return  # Supabase 저장 성공
-        except Exception:
-            pass
+        payload = {
+            "saved_at":       record.get("saved_at", ""),
+            "candidate_name": record.get("candidate_name", ""),
+            "dept":           record.get("dept", ""),
+            "result_json":    json.dumps(record.get("result", {}), ensure_ascii=False)
+        }
+        for _attempt in range(2):  # 1회 재시도
+            try:
+                r = req.post(
+                    f"{url}/rest/v1/{SUPABASE_TABLE}",
+                    headers=_sb_headers(key),
+                    json=payload, timeout=20
+                )
+                if r.status_code in (200, 201):
+                    return  # Supabase 저장 성공
+            except Exception:
+                pass
 
     # 로컬 폴백
     archive = load_archive()
@@ -1872,7 +1873,7 @@ def friendly_api_error(e):
     return f"분석 중 오류가 발생했습니다: {s[:200]}"
 
 # ── 탭 ──
-tab_single, tab_bulk, tab_org = st.tabs(["👤  개인 분석", "👥  대량 분석", "🏢  조직도"])
+tab_single, tab_bulk, tab_results, tab_org = st.tabs(["👤  개인 분석", "👥  대량 분석", "📊  분석 결과", "🏢  조직도"])
 
 
 # ════════════════════════════════════════════════════════
@@ -2965,7 +2966,171 @@ with tab_bulk:
 
 
 # ════════════════════════════════════════════════════════
-#  TAB 3 — 조직도
+#  TAB 3 — 분석 결과 (통합 대시보드)
+# ════════════════════════════════════════════════════════
+with tab_results:
+    st.markdown("""
+    <div class="section-header">
+        <span class="section-num">📊</span>
+        <span class="section-title">분석 결과 · 통합 대시보드</span>
+        <div class="section-rule"></div>
+    </div>
+    <p style="font-size:0.8rem;color:#7A7268;margin-bottom:1rem;">
+        지금까지 분석된 모든 인원의 결과·통계를 한곳에서 확인합니다. (동일 인물은 최신 결과 기준)
+    </p>
+    """, unsafe_allow_html=True)
+
+    _arc = load_archive()
+    _latest = {}
+    for _r in _arc:
+        _nm = _r.get("candidate_name", "")
+        if _nm and _nm not in _latest:
+            _latest[_nm] = _r
+    recs = list(_latest.values())
+
+    if not recs:
+        st.info("아직 저장된 분석 결과가 없습니다. 개인/대량 분석에서 먼저 분석을 진행하세요.")
+    else:
+        def _bonbu_of(d):
+            return d.split(" / ")[0] if d else "(미지정)"
+
+        rows_data = []
+        for r in recs:
+            R = r.get("result", {})
+            ov = compute_overall_score(R)[0]
+            rows_data.append({"name": r.get("candidate_name", ""), "dept": r.get("dept", ""),
+                              "R": R, "ov": ov if ov is not None else -1})
+        total = len(rows_data)
+        valid_ov = [d["ov"] for d in rows_data if d["ov"] >= 0]
+        avg_ov = round(sum(valid_ov) / len(valid_ov), 1) if valid_ov else "-"
+
+        verd_count = {"KEEP": 0, "DEVELOP": 0, "WATCH": 0, "MISFIT": 0}
+        for d in rows_data:
+            v = d["R"].get("rebalancing_verdict", {}).get("decision", "")
+            if v in verd_count:
+                verd_count[v] += 1
+
+        lead_imm = lead_dev = lead_no = 0
+        for d in rows_data:
+            _ls = d["R"].get("leadership_readiness", {}).get("score")
+            if not isinstance(_ls, (int, float)):
+                continue
+            if _ls >= 80: lead_imm += 1
+            elif _ls >= 60: lead_dev += 1
+            else: lead_no += 1
+
+        def _metric(label, val, color):
+            return (f'<div style="flex:1;min-width:115px;background:white;border:1px solid #D4CEC4;border-radius:8px;'
+                    f'border-top:3px solid {color};padding:0.9rem 1rem;text-align:center;">'
+                    f'<div style="font-size:1.6rem;font-weight:800;color:{color};line-height:1;">{val}</div>'
+                    f'<div style="font-size:0.72rem;color:#7A7268;margin-top:0.35rem;">{label}</div></div>')
+        st.markdown(
+            '<div style="display:flex;gap:0.7rem;flex-wrap:wrap;margin-bottom:1rem;">'
+            + _metric("총 분석 인원", total, "#2B3D5C")
+            + _metric("평균 종합점수", avg_ov, "#B8924A")
+            + _metric("✅ KEEP", verd_count["KEEP"], "#2D6A4F")
+            + _metric("⚠️ MISFIT", verd_count["MISFIT"], "#8B2635")
+            + _metric("즉시 리더 가능", lead_imm, "#2B3D5C")
+            + '</div>', unsafe_allow_html=True)
+
+        st.markdown('<div style="font-size:0.72rem;font-weight:700;letter-spacing:1px;color:#B8924A;text-transform:uppercase;margin:0.6rem 0 0.4rem;">판정 분포</div>', unsafe_allow_html=True)
+        _vc = {"KEEP": "#2D6A4F", "DEVELOP": "#2B3D5C", "WATCH": "#8B6914", "MISFIT": "#8B2635"}
+        _vmax = max(verd_count.values()) or 1
+        _bars = []
+        for v, c in _vc.items():
+            n = verd_count[v]
+            pct = int(n / _vmax * 100)
+            _bars.append(
+                f'<div style="display:flex;align-items:center;gap:0.6rem;margin:0.25rem 0;">'
+                f'<span style="width:74px;font-size:0.76rem;color:#3D3830;font-weight:700;">{v}</span>'
+                f'<div style="flex:1;background:#F2EEE6;border-radius:4px;height:16px;overflow:hidden;">'
+                f'<div style="width:{pct}%;height:100%;background:{c};"></div></div>'
+                f'<span style="width:36px;text-align:right;font-size:0.78rem;color:#1A1714;font-weight:700;">{n}</span></div>')
+        st.markdown('<div style="background:white;border:1px solid #D4CEC4;border-radius:8px;padding:0.9rem 1.1rem;margin-bottom:1rem;">' + "".join(_bars) + '</div>', unsafe_allow_html=True)
+
+        def _risk_dist(field):
+            cc = {}
+            for d in rows_data:
+                lv = d["R"].get(field, {}).get("level", "")
+                if lv:
+                    cc[lv] = cc.get(lv, 0) + 1
+            order = ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
+            emj = {"LOW": "🟢", "MEDIUM": "🟡", "HIGH": "🔴", "CRITICAL": "🔴"}
+            return " · ".join(f'{emj.get(k,"")} {k} {cc.get(k,0)}' for k in order if cc.get(k, 0))
+        st.markdown(
+            f'<div style="display:flex;gap:1.5rem;flex-wrap:wrap;font-size:0.8rem;color:#3D3830;margin-bottom:0.5rem;">'
+            f'<div><b style="color:#7A7268;">번아웃 위험</b><br>{_risk_dist("burnout_risk") or "-"}</div>'
+            f'<div><b style="color:#7A7268;">이직 위험</b><br>{_risk_dist("turnover_risk") or "-"}</div>'
+            f'<div><b style="color:#7A7268;">리더 적합성</b><br>즉시 {lead_imm} · 육성 {lead_dev} · 부적합 {lead_no}</div>'
+            f'</div>', unsafe_allow_html=True)
+
+        st.markdown('<div class="hr"></div>', unsafe_allow_html=True)
+        f1, f2, f3 = st.columns([1, 1.4, 1.4])
+        with f1:
+            _bopts = ["전체"] + sorted({_bonbu_of(d["dept"]) for d in rows_data})
+            fb = st.selectbox("본부", _bopts, key="res_bonbu")
+        with f2:
+            fv = st.multiselect("판정", ["KEEP", "DEVELOP", "WATCH", "MISFIT"], key="res_verd")
+        with f3:
+            fq = st.text_input("이름 검색", key="res_q")
+        filt = [d for d in rows_data
+                if (fb == "전체" or _bonbu_of(d["dept"]) == fb)
+                and (not fv or d["R"].get("rebalancing_verdict", {}).get("decision") in fv)
+                and (not fq.strip() or fq.strip() in d["name"])]
+        filt.sort(key=lambda x: x["ov"], reverse=True)
+
+        st.markdown(f'<div style="font-size:0.78rem;color:#7A7268;margin:0.6rem 0;">표시 {len(filt)}명 (종합 점수 순)</div>', unsafe_allow_html=True)
+        _dimk = ["cognitive_ability", "job_expertise", "proactiveness", "leadership"]
+        _dimn = ["인지", "전문성", "적극성", "리더십(역량)"]
+        _ree = {"LOW": "🟢", "MEDIUM": "🟡", "HIGH": "🔴", "CRITICAL": "🔴"}.get
+        _vee = {"KEEP": "✅", "DEVELOP": "📈", "WATCH": "👁", "MISFIT": "⚠️"}.get
+        _hdr = "| 순위 | 종합 | 이름 | 부서 | 판정 | 조직적합 | 리더십준비 | " + " | ".join(_dimn) + " | 번아웃 | 이직 |"
+        _nc = _hdr.count("|") - 1
+        _tr = [_hdr, "|" + "|".join([":---:"] * _nc) + "|"]
+        _rk = 0
+        for d in filt:
+            R = d["R"]
+            _rk += 1
+            _md = {1: "🥇", 2: "🥈", 3: "🥉"}.get(_rk, str(_rk))
+            dm = R.get("dimensions", {})
+            sc = [str(dm.get(k, {}).get("score", "?")) for k in _dimk]
+            bl = R.get("burnout_risk", {}).get("level", "?")
+            tl = R.get("turnover_risk", {}).get("level", "?")
+            vd = R.get("rebalancing_verdict", {}).get("decision", "?")
+            of = R.get("org_fit", {}).get("score", "?")
+            lr = R.get("leadership_readiness", {}).get("score", "?")
+            ovs = d["ov"] if d["ov"] >= 0 else "-"
+            _tr.append(f"| {_md} | **{ovs}** | **{d['name']}** | {d['dept']} | {_vee(vd,'⚪')} {vd} | {of} | {lr} | {' | '.join(sc)} | {_ree(bl,'⚪')} | {_ree(tl,'⚪')} |")
+        st.markdown("\n".join(_tr))
+
+        st.markdown('<div style="font-size:0.72rem;font-weight:700;letter-spacing:1px;color:#B8924A;text-transform:uppercase;margin:1.2rem 0 0.4rem;">본부별 평균 종합점수</div>', unsafe_allow_html=True)
+        _bagg = {}
+        for d in rows_data:
+            if d["ov"] >= 0:
+                _bagg.setdefault(_bonbu_of(d["dept"]), []).append(d["ov"])
+        _blines = []
+        for b in sorted(_bagg, key=lambda x: -(sum(_bagg[x]) / len(_bagg[x]))):
+            avg = round(sum(_bagg[b]) / len(_bagg[b]), 1)
+            _blines.append(f"- **{b}** · 평균 {avg} · {len(_bagg[b])}명")
+        st.markdown("\n".join(_blines) if _blines else "데이터 없음")
+
+        st.markdown('<div class="hr"></div>', unsafe_allow_html=True)
+        st.markdown('<div style="font-size:0.72rem;font-weight:700;letter-spacing:1px;color:#B8924A;text-transform:uppercase;margin:0.6rem 0;">개별 상세 결과</div>', unsafe_allow_html=True)
+        for d in filt:
+            ovs = d["ov"] if d["ov"] >= 0 else "-"
+            with st.expander(f"{d['name']} · {d['dept']} · 종합 {ovs}"):
+                render_result(d["R"], d["name"])
+
+        st.markdown('<div style="height:0.6rem;"></div>', unsafe_allow_html=True)
+        st.download_button(
+            "⬇ 전체 결과 내보내기 (JSON)",
+            data=json.dumps(recs, ensure_ascii=False, indent=2).encode("utf-8"),
+            file_name=f"talent_results_{datetime.now().strftime('%Y%m%d')}.json",
+            mime="application/json", use_container_width=True, key="res_export")
+
+
+# ════════════════════════════════════════════════════════
+#  TAB 4 — 조직도
 # ════════════════════════════════════════════════════════
 with tab_org:
     st.markdown("""
