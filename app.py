@@ -2032,595 +2032,790 @@ with tab_single:
 #  TAB 2 — 대량 분석
 # ════════════════════════════════════════════════════════
 with tab_bulk:
-    st.markdown("""
-    <div class="section-header">
-        <span class="section-num">01</span>
-        <span class="section-title">대량 분석 대상자 등록</span>
-        <div class="section-rule"></div>
-    </div>
-    <p style="font-size:0.8rem;color:#7A7268;margin-bottom:1.2rem;">
-        조직 명부에서 <b>여러 명을 한 번에 선택</b>해 목록에 담고, 대상자별 자료를 올린 뒤
-        <b>전체 분석 시작</b>을 누르면 순차 분석됩니다. 결과는 아카이브에 자동 저장돼요.
-    </p>
-    """, unsafe_allow_html=True)
+    sub_manual, sub_auto = st.tabs(["✍️  수동 등록", "⚡  자동 등록 (파일명 자동 인식)"])
 
-    if "bulk_list"    not in st.session_state: st.session_state["bulk_list"]    = []
-    if "bulk_results" not in st.session_state: st.session_state["bulk_results"] = []
-    if "bulk_done"    not in st.session_state: st.session_state["bulk_done"]    = False
-
-    _org_b = load_org_data()
-    _done_b = {r.get("candidate_name", "") for r in load_archive() if r.get("candidate_name")}
-
-    def _flatten_b(org):
-        out = {}
-        for bonbu, bd in org.items():
-            units = {}
-            bdir = bd.get("_직속", {})
-            dp = bdir.get("_직속", []) if isinstance(bdir, dict) else []
-            if dp:
-                units["(본부 직속)"] = dp
-            for tname, tdict in bd.items():
-                if tname == "_직속":
-                    continue
-                td = tdict.get("_직속", [])
-                if td:
-                    units[tname] = td
-                for pname, plist in tdict.items():
-                    if pname == "_직속":
-                        continue
-                    units[f"{tname} · {pname}"] = plist
-            if units:
-                out[bonbu] = units
-        return out
-
-    # ── 대상자 추가 (조직 명부에서 체크박스로 여러 명 선택) ──
-    with st.expander("➕  조직 명부에서 대상자 추가 (체크박스로 여러 명 선택)", expanded=not st.session_state["bulk_done"]):
-        _existing = {e["name"] for e in st.session_state["bulk_list"]}
-        if _org_b:
-            _flatb = _flatten_b(_org_b)
-            bc1, bc2 = st.columns([1, 1.6])
-            with bc1:
-                bb = st.selectbox("본부", ["전체"] + list(_flatb.keys()), key="b_bonbu")
-
-            # 팀·파트 선택지 구성 (팀 선택 시 하위 파트 인원까지 포함)
-            _optmembers = {}   # 라벨 -> [(person, dept)]
-            _opts = []
-            if bb != "전체":
-                _bunits = _flatb.get(bb, {})
-                _opts.append("(본부 전체)")
-                _optmembers["(본부 전체)"] = [(p, f"{bb} / {lbl}") for lbl, lst in _bunits.items() for p in lst]
-                if "(본부 직속)" in _bunits:
-                    _opts.append("(본부 직속)")
-                    _optmembers["(본부 직속)"] = [(p, f"{bb} / (본부 직속)") for p in _bunits["(본부 직속)"]]
-                _teams, _seen = [], set()
-                for lbl in _bunits:
-                    if lbl == "(본부 직속)":
-                        continue
-                    t = lbl.split(" · ", 1)[0] if " · " in lbl else lbl
-                    if t not in _seen:
-                        _seen.add(t)
-                        _teams.append(t)
-                for t in _teams:
-                    _direct = _bunits.get(t, [])
-                    _plabels = [lbl for lbl in _bunits if lbl.startswith(t + " · ")]
-                    _team_all = [(p, f"{bb} / {t}") for p in _direct]
-                    for pl in _plabels:
-                        _team_all += [(p, f"{bb} / {pl}") for p in _bunits[pl]]
-                    if _plabels:
-                        _tl = f"{t} (팀 전체 · 하위 파트 포함)"
-                        _opts.append(_tl)
-                        _optmembers[_tl] = _team_all
-                        if _direct:
-                            _dl = f"{t} · (팀 직속)"
-                            _opts.append(_dl)
-                            _optmembers[_dl] = [(p, f"{bb} / {t}") for p in _direct]
-                        for pl in _plabels:
-                            _opts.append(pl)
-                            _optmembers[pl] = [(p, f"{bb} / {pl}") for p in _bunits[pl]]
-                    else:
-                        _opts.append(t)
-                        _optmembers[t] = _team_all
-
-            with bc2:
-                if bb != "전체":
-                    bu = st.selectbox("팀 · 파트", _opts, key="b_unit")
-                else:
-                    bu = None
-                    st.markdown('<div style="font-size:0.8rem;color:#7A7268;padding-top:1.9rem;">전체 본부의 인원을 한 화면에서 선택</div>', unsafe_allow_html=True)
-            bsearch = st.text_input("이름 검색 (선택)", key="b_search", placeholder="이름 일부를 입력하면 목록이 좁혀집니다")
-
-            # 후보 인원 수집 (사람, 소속 라벨)
-            _cands = []
-            if bb == "전체":
-                for _bn, _us in _flatb.items():
-                    for _u, _lst in _us.items():
-                        for p in _lst:
-                            _cands.append((p, f"{_bn} / {_u}"))
-            else:
-                _cands = list(_optmembers.get(bu, []))
-            if bsearch and bsearch.strip():
-                _cands = [(p, d) for (p, d) in _cands if bsearch.strip() in p["name"]]
-
-            _selectable = [(p, d) for (p, d) in _cands if p["name"] not in _existing]
-            st.markdown(
-                f'<div style="font-size:0.8rem;color:#7A7268;margin:0.5rem 0 0.4rem;">'
-                f'표시 <b style="color:#1A1714;">{len(_cands)}</b>명 · 추가 가능 <b style="color:#1A1714;">{len(_selectable)}</b>명 '
-                f'<span style="color:#B0A898;">(✅ 분석 등록 / ⚪ 미등록 · 이미 담은 사람은 비활성)</span></div>',
-                unsafe_allow_html=True)
-
-            sc1, sc2 = st.columns(2)
-            with sc1:
-                if st.button("표시된 인원 전체 선택", use_container_width=True, key="b_selall"):
-                    for p, d in _selectable:
-                        st.session_state[f"bchk_{p['name']}"] = True
-                    st.rerun()
-            with sc2:
-                if st.button("선택 모두 해제", use_container_width=True, key="b_clrall"):
-                    for p, d in _cands:
-                        st.session_state[f"bchk_{p['name']}"] = False
-                    st.rerun()
-
-            if _cands:
-                _ck_cols = st.columns(3)
-                for _idx, (p, d) in enumerate(_cands):
-                    _tag = "✅" if p["name"] in _done_b else "⚪"
-                    with _ck_cols[_idx % 3]:
-                        if p["name"] in _existing:
-                            st.checkbox(f"{_tag} {p['name']} · 담음", value=True, disabled=True, key=f"bchkD_{p['name']}")
-                        else:
-                            st.checkbox(f"{_tag} {p['name']} · {p.get('pos','')}", key=f"bchk_{p['name']}")
-            else:
-                st.caption("조건에 맞는 인원이 없습니다.")
-
-            if st.button("✓ 선택한 인원 목록에 추가", use_container_width=True, key="b_add"):
-                added = 0
-                cur = {e["name"] for e in st.session_state["bulk_list"]}
-                _dmap = {p["name"]: d for p, d in _cands}
-                for p, d in _selectable:
-                    if p["name"] in cur:
-                        continue
-                    if st.session_state.get(f"bchk_{p['name']}"):
-                        st.session_state["bulk_list"].append({
-                            "name": p["name"], "dept": _dmap.get(p["name"], ""),
-                            "file_data": {}, "file_count": 0})
-                        cur.add(p["name"])
-                        added += 1
-                if added:
-                    st.success(f"✅ {added}명 목록에 추가됨")
-                    st.rerun()
-                else:
-                    st.warning("체크된 새 인원이 없습니다.")
-        else:
-            st.info("org_data.json이 없어 명부 선택을 사용할 수 없어요. 아래 직접 입력을 이용하세요.")
-
-        st.markdown('<div style="height:0.3rem;"></div>', unsafe_allow_html=True)
-        with st.expander("✏️ 직접 입력으로 추가 (명부에 없는 경우)"):
-            mc1, mc2 = st.columns(2)
-            with mc1: man_name = st.text_input("성명", key="b_manname")
-            with mc2: man_dept = st.text_input("소속", key="b_mandept")
-            if st.button("이 인원 추가", key="b_manadd"):
-                if not man_name:
-                    st.error("성명을 입력해주세요.")
-                elif man_name in {e["name"] for e in st.session_state["bulk_list"]}:
-                    st.warning("이미 목록에 있습니다.")
-                else:
-                    st.session_state["bulk_list"].append({"name": man_name, "dept": man_dept, "file_data": {}, "file_count": 0})
-                    st.success(f"✅ {man_name} 추가됨")
-                    st.rerun()
-
-    # ── 등록된 목록 · 대상자별 자료 업로드 ──
-    if st.session_state["bulk_list"]:
+    with sub_manual:
         st.markdown("""
-        <div class="section-header" style="margin-top:1.5rem;">
-            <span class="section-num">02</span>
-            <span class="section-title">등록된 대상자 · 자료 업로드</span>
+        <div class="section-header">
+            <span class="section-num">01</span>
+            <span class="section-title">대량 분석 대상자 등록</span>
             <div class="section-rule"></div>
         </div>
-        <p style="font-size:0.76rem;color:#7A7268;margin-bottom:0.8rem;">
-            각 대상자에 자료(이력서·기안서·MBTI·인적성·SNS 등)를 올려주세요. 자료가 없는 대상자는 분석에서 제외됩니다.
+        <p style="font-size:0.8rem;color:#7A7268;margin-bottom:1.2rem;">
+            조직 명부에서 <b>여러 명을 한 번에 선택</b>해 목록에 담고, 대상자별 자료를 올린 뒤
+            <b>전체 분석 시작</b>을 누르면 순차 분석됩니다. 결과는 아카이브에 자동 저장돼요.
         </p>
         """, unsafe_allow_html=True)
 
-        pending_files = {}
-        for i, cand in enumerate(st.session_state["bulk_list"]):
-            done = i < len(st.session_state["bulk_results"]) and st.session_state["bulk_results"][i].get("success")
-            reg = "✅" if cand["name"] in _done_b else "⚪"
-            lc1, lc2 = st.columns([5, 1])
-            with lc1:
-                stat = "✅ 분석 완료" if done else "⏳ 대기"
-                st.markdown(f"""
-                <div style="background:white;border:1px solid #D4CEC4;border-radius:6px;
-                            padding:0.6rem 1rem;border-left:3px solid {'#2D6A4F' if done else '#B8924A'};">
-                    <span style="font-size:0.95rem;">{reg}</span>
-                    <b style="font-size:0.9rem;color:#1A1714;margin-left:0.3rem;">{cand['name']}</b>
-                    <span style="font-size:0.74rem;color:#7A7268;margin-left:0.6rem;">{cand.get('dept','')}</span>
-                    <span style="font-size:0.72rem;color:#B0A898;margin-left:0.6rem;">{stat}</span>
+        if "bulk_list"    not in st.session_state: st.session_state["bulk_list"]    = []
+        if "bulk_results" not in st.session_state: st.session_state["bulk_results"] = []
+        if "bulk_done"    not in st.session_state: st.session_state["bulk_done"]    = False
+
+        _org_b = load_org_data()
+        _done_b = {r.get("candidate_name", "") for r in load_archive() if r.get("candidate_name")}
+
+        def _flatten_b(org):
+            out = {}
+            for bonbu, bd in org.items():
+                units = {}
+                bdir = bd.get("_직속", {})
+                dp = bdir.get("_직속", []) if isinstance(bdir, dict) else []
+                if dp:
+                    units["(본부 직속)"] = dp
+                for tname, tdict in bd.items():
+                    if tname == "_직속":
+                        continue
+                    td = tdict.get("_직속", [])
+                    if td:
+                        units[tname] = td
+                    for pname, plist in tdict.items():
+                        if pname == "_직속":
+                            continue
+                        units[f"{tname} · {pname}"] = plist
+                if units:
+                    out[bonbu] = units
+            return out
+
+        # ── 대상자 추가 (조직 명부에서 체크박스로 여러 명 선택) ──
+        with st.expander("➕  조직 명부에서 대상자 추가 (체크박스로 여러 명 선택)", expanded=not st.session_state["bulk_done"]):
+            _existing = {e["name"] for e in st.session_state["bulk_list"]}
+            if _org_b:
+                _flatb = _flatten_b(_org_b)
+                bc1, bc2 = st.columns([1, 1.6])
+                with bc1:
+                    bb = st.selectbox("본부", ["전체"] + list(_flatb.keys()), key="b_bonbu")
+
+                # 팀·파트 선택지 구성 (팀 선택 시 하위 파트 인원까지 포함)
+                _optmembers = {}   # 라벨 -> [(person, dept)]
+                _opts = []
+                if bb != "전체":
+                    _bunits = _flatb.get(bb, {})
+                    _opts.append("(본부 전체)")
+                    _optmembers["(본부 전체)"] = [(p, f"{bb} / {lbl}") for lbl, lst in _bunits.items() for p in lst]
+                    if "(본부 직속)" in _bunits:
+                        _opts.append("(본부 직속)")
+                        _optmembers["(본부 직속)"] = [(p, f"{bb} / (본부 직속)") for p in _bunits["(본부 직속)"]]
+                    _teams, _seen = [], set()
+                    for lbl in _bunits:
+                        if lbl == "(본부 직속)":
+                            continue
+                        t = lbl.split(" · ", 1)[0] if " · " in lbl else lbl
+                        if t not in _seen:
+                            _seen.add(t)
+                            _teams.append(t)
+                    for t in _teams:
+                        _direct = _bunits.get(t, [])
+                        _plabels = [lbl for lbl in _bunits if lbl.startswith(t + " · ")]
+                        _team_all = [(p, f"{bb} / {t}") for p in _direct]
+                        for pl in _plabels:
+                            _team_all += [(p, f"{bb} / {pl}") for p in _bunits[pl]]
+                        if _plabels:
+                            _tl = f"{t} (팀 전체 · 하위 파트 포함)"
+                            _opts.append(_tl)
+                            _optmembers[_tl] = _team_all
+                            if _direct:
+                                _dl = f"{t} · (팀 직속)"
+                                _opts.append(_dl)
+                                _optmembers[_dl] = [(p, f"{bb} / {t}") for p in _direct]
+                            for pl in _plabels:
+                                _opts.append(pl)
+                                _optmembers[pl] = [(p, f"{bb} / {pl}") for p in _bunits[pl]]
+                        else:
+                            _opts.append(t)
+                            _optmembers[t] = _team_all
+
+                with bc2:
+                    if bb != "전체":
+                        bu = st.selectbox("팀 · 파트", _opts, key="b_unit")
+                    else:
+                        bu = None
+                        st.markdown('<div style="font-size:0.8rem;color:#7A7268;padding-top:1.9rem;">전체 본부의 인원을 한 화면에서 선택</div>', unsafe_allow_html=True)
+                bsearch = st.text_input("이름 검색 (선택)", key="b_search", placeholder="이름 일부를 입력하면 목록이 좁혀집니다")
+
+                # 후보 인원 수집 (사람, 소속 라벨)
+                _cands = []
+                if bb == "전체":
+                    for _bn, _us in _flatb.items():
+                        for _u, _lst in _us.items():
+                            for p in _lst:
+                                _cands.append((p, f"{_bn} / {_u}"))
+                else:
+                    _cands = list(_optmembers.get(bu, []))
+                if bsearch and bsearch.strip():
+                    _cands = [(p, d) for (p, d) in _cands if bsearch.strip() in p["name"]]
+
+                _selectable = [(p, d) for (p, d) in _cands if p["name"] not in _existing]
+                st.markdown(
+                    f'<div style="font-size:0.8rem;color:#7A7268;margin:0.5rem 0 0.4rem;">'
+                    f'표시 <b style="color:#1A1714;">{len(_cands)}</b>명 · 추가 가능 <b style="color:#1A1714;">{len(_selectable)}</b>명 '
+                    f'<span style="color:#B0A898;">(✅ 분석 등록 / ⚪ 미등록 · 이미 담은 사람은 비활성)</span></div>',
+                    unsafe_allow_html=True)
+
+                sc1, sc2 = st.columns(2)
+                with sc1:
+                    if st.button("표시된 인원 전체 선택", use_container_width=True, key="b_selall"):
+                        for p, d in _selectable:
+                            st.session_state[f"bchk_{p['name']}"] = True
+                        st.rerun()
+                with sc2:
+                    if st.button("선택 모두 해제", use_container_width=True, key="b_clrall"):
+                        for p, d in _cands:
+                            st.session_state[f"bchk_{p['name']}"] = False
+                        st.rerun()
+
+                if _cands:
+                    _ck_cols = st.columns(3)
+                    for _idx, (p, d) in enumerate(_cands):
+                        _tag = "✅" if p["name"] in _done_b else "⚪"
+                        with _ck_cols[_idx % 3]:
+                            if p["name"] in _existing:
+                                st.checkbox(f"{_tag} {p['name']} · 담음", value=True, disabled=True, key=f"bchkD_{p['name']}")
+                            else:
+                                st.checkbox(f"{_tag} {p['name']} · {p.get('pos','')}", key=f"bchk_{p['name']}")
+                else:
+                    st.caption("조건에 맞는 인원이 없습니다.")
+
+                if st.button("✓ 선택한 인원 목록에 추가", use_container_width=True, key="b_add"):
+                    added = 0
+                    cur = {e["name"] for e in st.session_state["bulk_list"]}
+                    _dmap = {p["name"]: d for p, d in _cands}
+                    for p, d in _selectable:
+                        if p["name"] in cur:
+                            continue
+                        if st.session_state.get(f"bchk_{p['name']}"):
+                            st.session_state["bulk_list"].append({
+                                "name": p["name"], "dept": _dmap.get(p["name"], ""),
+                                "file_data": {}, "file_count": 0})
+                            cur.add(p["name"])
+                            added += 1
+                    if added:
+                        st.success(f"✅ {added}명 목록에 추가됨")
+                        st.rerun()
+                    else:
+                        st.warning("체크된 새 인원이 없습니다.")
+            else:
+                st.info("org_data.json이 없어 명부 선택을 사용할 수 없어요. 아래 직접 입력을 이용하세요.")
+
+            st.markdown('<div style="height:0.3rem;"></div>', unsafe_allow_html=True)
+            with st.expander("✏️ 직접 입력으로 추가 (명부에 없는 경우)"):
+                mc1, mc2 = st.columns(2)
+                with mc1: man_name = st.text_input("성명", key="b_manname")
+                with mc2: man_dept = st.text_input("소속", key="b_mandept")
+                if st.button("이 인원 추가", key="b_manadd"):
+                    if not man_name:
+                        st.error("성명을 입력해주세요.")
+                    elif man_name in {e["name"] for e in st.session_state["bulk_list"]}:
+                        st.warning("이미 목록에 있습니다.")
+                    else:
+                        st.session_state["bulk_list"].append({"name": man_name, "dept": man_dept, "file_data": {}, "file_count": 0})
+                        st.success(f"✅ {man_name} 추가됨")
+                        st.rerun()
+
+        # ── 등록된 목록 · 대상자별 자료 업로드 ──
+        if st.session_state["bulk_list"]:
+            st.markdown("""
+            <div class="section-header" style="margin-top:1.5rem;">
+                <span class="section-num">02</span>
+                <span class="section-title">등록된 대상자 · 자료 업로드</span>
+                <div class="section-rule"></div>
+            </div>
+            <p style="font-size:0.76rem;color:#7A7268;margin-bottom:0.8rem;">
+                각 대상자에 자료(이력서·기안서·MBTI·인적성·SNS 등)를 올려주세요. 자료가 없는 대상자는 분석에서 제외됩니다.
+            </p>
+            """, unsafe_allow_html=True)
+
+            pending_files = {}
+            for i, cand in enumerate(st.session_state["bulk_list"]):
+                done = i < len(st.session_state["bulk_results"]) and st.session_state["bulk_results"][i].get("success")
+                reg = "✅" if cand["name"] in _done_b else "⚪"
+                lc1, lc2 = st.columns([5, 1])
+                with lc1:
+                    stat = "✅ 분석 완료" if done else "⏳ 대기"
+                    st.markdown(f"""
+                    <div style="background:white;border:1px solid #D4CEC4;border-radius:6px;
+                                padding:0.6rem 1rem;border-left:3px solid {'#2D6A4F' if done else '#B8924A'};">
+                        <span style="font-size:0.95rem;">{reg}</span>
+                        <b style="font-size:0.9rem;color:#1A1714;margin-left:0.3rem;">{cand['name']}</b>
+                        <span style="font-size:0.74rem;color:#7A7268;margin-left:0.6rem;">{cand.get('dept','')}</span>
+                        <span style="font-size:0.72rem;color:#B0A898;margin-left:0.6rem;">{stat}</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+                with lc2:
+                    if not st.session_state["bulk_done"]:
+                        if st.button("삭제", key=f"bdel_{i}", use_container_width=True):
+                            st.session_state["bulk_list"].pop(i)
+                            if i < len(st.session_state["bulk_results"]):
+                                st.session_state["bulk_results"].pop(i)
+                            st.rerun()
+                if not st.session_state["bulk_done"]:
+                    up = st.file_uploader(
+                        f"{cand['name']} 자료",
+                        type=["pdf", "docx", "jpg", "jpeg", "png", "webp", "txt", "md"],
+                        accept_multiple_files=True, key=f"bup_{cand['name']}",
+                        label_visibility="collapsed"
+                    )
+                    pending_files[i] = up
+                    st.caption(f"📎 {cand['name']} — {len(up) if up else 0}개 업로드됨")
+
+            st.markdown('<div style="height:0.8rem;"></div>', unsafe_allow_html=True)
+
+            # ── 전체 분석 시작 ──
+            if not st.session_state["bulk_done"]:
+                _ready = sum(1 for i in pending_files if pending_files[i])
+                if st.button(f"◈  전체 분석 시작 (자료 등록 {_ready}명)", use_container_width=True, key="b_run"):
+                    if _ready == 0:
+                        st.error("⚠️ 자료가 업로드된 대상자가 없습니다. 각 대상자에 자료를 올려주세요.")
+                    else:
+                        st.session_state["bulk_results"] = []
+                        n_t = len(st.session_state["bulk_list"])
+                        prog = st.progress(0, text="분석 준비 중...")
+                        for k, cand in enumerate(st.session_state["bulk_list"]):
+                            prog.progress(k / n_t, text=f"({k+1}/{n_t}) {cand['name']} ...")
+                            ups = pending_files.get(k)
+                            if not ups:
+                                st.session_state["bulk_results"].append({
+                                    "name": cand["name"], "dept": cand.get("dept", ""),
+                                    "result": {}, "success": False, "error": "자료 미업로드"})
+                                prog.progress((k + 1) / n_t)
+                                continue
+                            try:
+                                fd = {uf.name: read_file_content(uf) for uf in ups}
+                                if cand.get("dept"): fd["소속 부서"] = cand["dept"]
+                                fd["회사 인재상"] = company_standard
+                                fd["회사 5대 핵심문화 축"] = core_culture
+                                fd["회사 향후 방향성"] = company_direction
+                                R = analyze_candidate(api_key, fd, cand["name"], company_standard)
+                                st.session_state["bulk_results"].append({
+                                    "name": cand["name"], "dept": cand.get("dept", ""),
+                                    "result": R, "success": True})
+                                save_to_archive({
+                                    "saved_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                    "candidate_name": cand["name"], "dept": cand.get("dept", ""),
+                                    "result": R})
+                            except Exception as e:
+                                st.session_state["bulk_results"].append({
+                                    "name": cand["name"], "dept": cand.get("dept", ""),
+                                    "result": {}, "success": False, "error": str(e)})
+                            prog.progress((k + 1) / n_t, text=f"({k+1}/{n_t}) {cand['name']} 완료")
+                        prog.progress(1.0, text="✅ 분석 완료!")
+                        st.session_state["bulk_done"] = True
+                        st.rerun()
+
+            # ── 대량 분석 결과 ──
+            if st.session_state["bulk_done"] and st.session_state["bulk_results"]:
+                st.markdown("""
+                <div class="section-header" style="margin-top:2rem;">
+                    <span class="section-num">03</span>
+                    <span class="section-title">대량 분석 결과 요약</span>
+                    <div class="section-rule"></div>
                 </div>
                 """, unsafe_allow_html=True)
-            with lc2:
-                if not st.session_state["bulk_done"]:
-                    if st.button("삭제", key=f"bdel_{i}", use_container_width=True):
-                        st.session_state["bulk_list"].pop(i)
-                        if i < len(st.session_state["bulk_results"]):
-                            st.session_state["bulk_results"].pop(i)
-                        st.rerun()
-            if not st.session_state["bulk_done"]:
-                up = st.file_uploader(
-                    f"{cand['name']} 자료",
-                    type=["pdf", "docx", "jpg", "jpeg", "png", "webp", "txt", "md"],
-                    accept_multiple_files=True, key=f"bup_{cand['name']}",
-                    label_visibility="collapsed"
-                )
-                pending_files[i] = up
-                st.caption(f"📎 {cand['name']} — {len(up) if up else 0}개 업로드됨")
 
-        st.markdown('<div style="height:0.8rem;"></div>', unsafe_allow_html=True)
+                # 비교 테이블 (종합 점수 순위 + 리밸런싱 판정 포함)
+                dim_keys  = ["cognitive_ability","job_expertise","proactiveness","leadership"]
+                dim_names = ["인지","전문성","적극성","리더십"]
+                re_emoji  = {"LOW":"🟢","MEDIUM":"🟡","HIGH":"🔴","CRITICAL":"🔴"}.get
+                verdict_emoji = {"KEEP":"✅","DEVELOP":"📈","WATCH":"👁","MISFIT":"⚠️"}.get
 
-        # ── 전체 분석 시작 ──
-        if not st.session_state["bulk_done"]:
-            _ready = sum(1 for i in pending_files if pending_files[i])
-            if st.button(f"◈  전체 분석 시작 (자료 등록 {_ready}명)", use_container_width=True, key="b_run"):
-                if _ready == 0:
-                    st.error("⚠️ 자료가 업로드된 대상자가 없습니다. 각 대상자에 자료를 올려주세요.")
-                else:
+                # 종합 점수 계산 후 내림차순 정렬 (분석 실패 건은 맨 아래)
+                scored = []
+                for br in st.session_state["bulk_results"]:
+                    ov = compute_overall_score(br["result"])[0] if br["success"] else None
+                    scored.append((ov if ov is not None else -1, br, ov))
+                scored.sort(key=lambda x: x[0], reverse=True)
+
+                rows_header = "| 순위 | 종합 | 이름 | 부서 | 판정 | 조직적합 | 리더십 | " + " | ".join(dim_names) + " | 번아웃 | 이직 |"
+                _ncols = rows_header.count("|") - 1
+                rows = [rows_header, "|" + "|".join([":---:"] * _ncols) + "|"]
+                rank = 0
+                for _, br, ov in scored:
+                    if not br["success"]:
+                        rows.append(f"| - | - | {br['name']} | {br['dept']} | ❌ | | | | | | | | |")
+                        continue
+                    rank += 1
+                    medal = {1:"🥇",2:"🥈",3:"🥉"}.get(rank, str(rank))
+                    R = br["result"]
+                    dims    = R.get("dimensions", {})
+                    scores  = [str(dims.get(k,{}).get("score","?")) for k in dim_keys]
+                    b_lvl   = R.get("burnout_risk",{}).get("level","?")
+                    t_lvl   = R.get("turnover_risk",{}).get("level","?")
+                    verdict = R.get("rebalancing_verdict",{}).get("decision","?")
+                    of_sc   = R.get("org_fit",{}).get("score","?")
+                    lr_sc   = R.get("leadership_readiness",{}).get("score","?")
+                    rows.append(f"| {medal} | **{ov}** | **{br['name']}** | {br['dept']} | {verdict_emoji(verdict,'⚪')} {verdict} | {of_sc} | {lr_sc} | {' | '.join(scores)} | {re_emoji(b_lvl,'⚪')} | {re_emoji(t_lvl,'⚪')} |")
+                st.markdown("\n".join(rows))
+
+                st.markdown("""
+                <p style="font-size:0.7rem;color:#B0A898;margin-top:0.5rem;">
+                종합 점수 높은 순으로 정렬 · 종합 = 세부 점수 가중합(역량35%·조직적합30%·리더십준비15%·저위험20%)
+                <br>판정: ✅ KEEP(핵심·유지) · 📈 DEVELOP(육성) · 👁 WATCH(관찰) · ⚠️ MISFIT(부적합)
+                &nbsp;|&nbsp; 모든 점수 100점 만점
+                </p>
+                """, unsafe_allow_html=True)
+
+                # ── 집단 비교 분석 ──
+                st.markdown("""
+                <div class="section-header" style="margin-top:2rem;">
+                    <span class="section-num">04</span>
+                    <span class="section-title">집단 비교 분석</span>
+                    <div class="section-rule"></div>
+                </div>
+                <p style="font-size:0.78rem;color:#7A7268;margin-bottom:1rem;">
+                    부서·판정 분포를 한눈에 파악합니다.
+                </p>
+                """, unsafe_allow_html=True)
+
+                ok_results = [br for br in st.session_state["bulk_results"] if br["success"]]
+
+                # 판정 분포
+                verdict_count = {}
+                for br in ok_results:
+                    v = br["result"].get("rebalancing_verdict",{}).get("decision","미분류")
+                    verdict_count[v] = verdict_count.get(v, 0) + 1
+
+                vc1, vc2, vc3, vc4 = st.columns(4)
+                v_meta = [("KEEP","✅","#2D6A4F"),("DEVELOP","📈","#2B3D5C"),("WATCH","👁","#8B6914"),("MISFIT","⚠️","#8B2635")]
+                for col, (vk, emoji, vcolor) in zip([vc1,vc2,vc3,vc4], v_meta):
+                    with col:
+                        cnt = verdict_count.get(vk, 0)
+                        st.markdown(f"""
+                        <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;
+                                    padding:1.2rem;text-align:center;border-top:3px solid {vcolor};">
+                            <div style="font-size:1.5rem;">{emoji}</div>
+                            <div style="font-family:'DM Serif Display',serif;font-size:2rem;
+                                        color:{vcolor};font-style:italic;">{cnt}</div>
+                            <div style="font-size:0.65rem;letter-spacing:1px;color:#7A7268;
+                                        text-transform:uppercase;">{vk}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                # 부서별 평균
+                from collections import defaultdict
+                dept_data = defaultdict(list)
+                for br in ok_results:
+                    dept_data[br["dept"] or "미지정"].append(br["result"])
+
+                if len(dept_data) > 1:
+                    st.markdown('<div style="height:1rem;"></div>', unsafe_allow_html=True)
+                    st.markdown('<p style="font-size:0.75rem;font-weight:600;color:#3D3830;margin-bottom:0.5rem;">📊 부서별 평균 역량</p>', unsafe_allow_html=True)
+                    drows = ["| 부서 | 인원 | 종합 | 인지 | 전문성 | 적극성 | 리더십 | 조직적합 |",
+                             "|------|:---:|:---:|:---:|:---:|:---:|:---:|:---:|"]
+                    for dept, results in dept_data.items():
+                        n = len(results)
+                        def avg(key, sub="score"):
+                            vals = [r.get("dimensions",{}).get(key,{}).get(sub,0) for r in results]
+                            vals = [v for v in vals if isinstance(v,(int,float))]
+                            return round(sum(vals)/len(vals)) if vals else "-"
+                        of_vals = [r.get("org_fit",{}).get("score",0) for r in results]
+                        of_vals = [v for v in of_vals if isinstance(v,(int,float))]
+                        of_avg = round(sum(of_vals)/len(of_vals)) if of_vals else "-"
+                        ov_vals = [compute_overall_score(r)[0] for r in results]
+                        ov_vals = [v for v in ov_vals if isinstance(v,(int,float))]
+                        ov_avg = round(sum(ov_vals)/len(ov_vals)) if ov_vals else "-"
+                        drows.append(f"| {dept} | {n} | **{ov_avg}** | {avg('cognitive_ability')} | {avg('job_expertise')} | {avg('proactiveness')} | {avg('leadership')} | {of_avg} |")
+                    st.markdown("\n".join(drows))
+
+                # ── 리더 적합성 스크리닝 ──
+                st.markdown("""
+                <div class="section-header" style="margin-top:1.8rem;">
+                    <span class="section-num">05</span>
+                    <span class="section-title">리더 적합성 스크리닝</span>
+                    <div class="section-rule"></div>
+                </div>
+                """, unsafe_allow_html=True)
+                lead_buckets = {"즉시 가능 (80+)": [], "육성 후 가능 (60–79)": [], "현재 부적합 (<60)": []}
+                for br in ok_results:
+                    lr = br["result"].get("leadership_readiness", {}).get("score")
+                    if not isinstance(lr, (int, float)):
+                        continue
+                    if lr >= 80:   lead_buckets["즉시 가능 (80+)"].append((br["name"], lr))
+                    elif lr >= 60: lead_buckets["육성 후 가능 (60–79)"].append((br["name"], lr))
+                    else:          lead_buckets["현재 부적합 (<60)"].append((br["name"], lr))
+                lb_cols = st.columns(3)
+                lb_meta = [("즉시 가능 (80+)", "#2D6A4F"), ("육성 후 가능 (60–79)", "#2B3D5C"), ("현재 부적합 (<60)", "#8B2635")]
+                for col, (label, color) in zip(lb_cols, lb_meta):
+                    people = sorted(lead_buckets[label], key=lambda x: x[1], reverse=True)
+                    names_html = "".join(
+                        f'<div style="font-size:0.75rem;color:#3D3830;margin:2px 0;">{n} <b style="color:{color};">{s}</b></div>'
+                        for n, s in people
+                    ) or '<div style="font-size:0.72rem;color:#B0A898;">해당 없음</div>'
+                    with col:
+                        st.markdown(f"""
+                        <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;padding:1rem 1.1rem;border-top:3px solid {color};">
+                            <div style="font-size:0.64rem;font-weight:700;letter-spacing:1px;color:{color};text-transform:uppercase;margin-bottom:0.5rem;">{label} · {len(people)}명</div>
+                            {names_html}
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                # ── MISFIT·WATCH 공통 특징 추출 ──
+                from collections import Counter
+                risk_people = [br for br in ok_results
+                               if br["result"].get("rebalancing_verdict", {}).get("decision") in ("MISFIT", "WATCH")]
+                if risk_people:
+                    tag_counter = Counter()
+                    for br in risk_people:
+                        for t in br["result"].get("personality_tags", []):
+                            tag_counter[t] += 1
+                    common = [(t, c) for t, c in tag_counter.most_common(8) if c >= 2]
+                    def _avg_field(people, getter):
+                        vals = [getter(br["result"]) for br in people]
+                        vals = [v for v in vals if isinstance(v, (int, float))]
+                        return round(sum(vals) / len(vals)) if vals else "-"
+                    avg_of = _avg_field(risk_people, lambda R: R.get("org_fit", {}).get("score"))
+                    avg_ov = _avg_field(risk_people, lambda R: compute_overall_score(R)[0])
+                    names = ", ".join(br["name"] for br in risk_people)
+                    tags_html = "".join(
+                        f'<span style="display:inline-block;background:#FAEAEC;border:1px solid #E6C9CE;border-radius:4px;padding:2px 9px;margin:2px;font-size:0.72rem;color:#8B2635;">{t} ×{c}</span>'
+                        for t, c in common
+                    ) or '<span style="font-size:0.73rem;color:#B0A898;">2명 이상이 공유하는 공통 태그 없음</span>'
+                    st.markdown("""
+                    <div class="section-header" style="margin-top:1.8rem;">
+                        <span class="section-num">06</span>
+                        <span class="section-title">MISFIT · WATCH 공통 특징 (제외 기준 패턴)</span>
+                        <div class="section-rule"></div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    st.markdown(f"""
+                    <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;padding:1.2rem 1.4rem;border-left:3px solid #8B2635;">
+                        <div style="font-size:0.74rem;color:#7A7268;margin-bottom:0.6rem;">대상 {len(risk_people)}명 · 평균 종합 {avg_ov} · 평균 조직적합 {avg_of}</div>
+                        <div style="font-size:0.7rem;color:#B0A898;margin-bottom:0.4rem;">공유 성향 태그</div>
+                        <div>{tags_html}</div>
+                        <div style="font-size:0.7rem;color:#7A7268;margin-top:0.7rem;">대상자: {names}</div>
+                    </div>
+                    <p style="font-size:0.68rem;color:#B0A898;margin-top:0.5rem;">※ 자동 추출된 통계 패턴입니다. 개인 인사 판단은 반드시 추가 검토를 거치세요.</p>
+                    """, unsafe_allow_html=True)
+
+                # ── 집단 비교 (전공·대학·학력·출신지역) ──
+                def group_overall_table(field_label, getter):
+                    groups = defaultdict(list)
+                    for br in ok_results:
+                        key = getter(br["result"]) or "미상"
+                        if not key or key == "자료 미제공":
+                            key = "미상"
+                        ov = compute_overall_score(br["result"])[0]
+                        if isinstance(ov, (int, float)):
+                            groups[key].append(ov)
+                    if not [k for k in groups if k != "미상"]:
+                        return None
+                    rows = [f"| {field_label} | 인원 | 평균 종합 |", "|------|:---:|:---:|"]
+                    for k, vals in sorted(groups.items(), key=lambda kv: sum(kv[1]) / len(kv[1]), reverse=True):
+                        rows.append(f"| {k} | {len(vals)} | **{round(sum(vals)/len(vals))}** |")
+                    return "\n".join(rows)
+
+                group_specs = [
+                    ("학력수준", lambda R: R.get("profile", {}).get("education_level")),
+                    ("전공",     lambda R: R.get("profile", {}).get("major")),
+                    ("대학",     lambda R: R.get("profile", {}).get("university")),
+                    ("출신지역", lambda R: R.get("profile", {}).get("region")),
+                ]
+                group_tables = [(lbl, group_overall_table(lbl, g)) for lbl, g in group_specs]
+                group_tables = [(lbl, t) for lbl, t in group_tables if t]
+                if group_tables:
+                    st.markdown("""
+                    <div class="section-header" style="margin-top:1.8rem;">
+                        <span class="section-num">07</span>
+                        <span class="section-title">집단 비교 · 전공·대학·학력·지역</span>
+                        <div class="section-rule"></div>
+                    </div>
+                    <p style="font-size:0.72rem;color:#B0A898;margin-bottom:0.6rem;">
+                        프로필이 추출된 인원만 집계됩니다(미추출은 '미상'). '학력수준'으로 고학력=고성과 여부를 가늠할 수 있습니다.
+                        출신지역은 통계 참고용이며 개인 점수에는 반영되지 않습니다.
+                    </p>
+                    """, unsafe_allow_html=True)
+                    for lbl, t in group_tables:
+                        st.markdown(f'<p style="font-size:0.74rem;font-weight:600;color:#3D3830;margin:0.7rem 0 0.3rem;">📊 {lbl}별 평균 종합 점수</p>', unsafe_allow_html=True)
+                        st.markdown(t)
+
+                st.markdown('<div style="height:1.5rem;"></div>', unsafe_allow_html=True)
+
+                # ── 다운로드 (JSON + Excel) ──
+                dl1, dl2 = st.columns(2)
+                with dl1:
+                    export_bulk = [{"name":br["name"],"dept":br["dept"],"result":br.get("result",{})} for br in ok_results]
+                    st.download_button(
+                        "⬇ 전체 결과 JSON",
+                        data=json.dumps(export_bulk, ensure_ascii=False, indent=2).encode("utf-8"),
+                        file_name=f"bulk_analysis_{datetime.now().strftime('%Y%m%d_%H%M')}.json",
+                        mime="application/json", use_container_width=True
+                    )
+                with dl2:
+                    # Excel 생성
+                    try:
+                        import io as _io
+                        import openpyxl
+                        from openpyxl.styles import Font, PatternFill, Alignment
+
+                        wb = openpyxl.Workbook()
+                        ws = wb.active
+                        ws.title = "인재분석결과"
+                        headers = ["순위","이름","부서","종합점수","리밸런싱판정","신뢰도","조직적합도","방향성적합도","리더십준비도",
+                                   "인지능력","잡전문성","적극성","리더십",
+                                   "번아웃","이직위험","SNS점수","전공","대학","학력수준","출신지역",
+                                   "학력성과정합","추천커리어트랙","한줄평","리밸런싱근거"]
+                        ws.append(headers)
+                        for c in range(1, len(headers)+1):
+                            cell = ws.cell(row=1, column=c)
+                            cell.font = Font(bold=True, color="FFFFFF", size=10)
+                            cell.fill = PatternFill("solid", fgColor="1A1714")
+                            cell.alignment = Alignment(horizontal="center", vertical="center")
+
+                        # 종합 점수 내림차순 정렬 후 순위 부여
+                        excel_sorted = sorted(
+                            ok_results,
+                            key=lambda br: (compute_overall_score(br["result"])[0] or 0),
+                            reverse=True
+                        )
+                        for rank_i, br in enumerate(excel_sorted, 1):
+                            R = br["result"]
+                            d = R.get("dimensions",{})
+                            p = R.get("profile",{})
+                            sn = R.get("sns_analysis",{})
+                            ov = compute_overall_score(R)[0]
+                            ws.append([
+                                rank_i,
+                                br["name"], br["dept"],
+                                ov if ov is not None else "",
+                                R.get("rebalancing_verdict",{}).get("decision",""),
+                                R.get("rebalancing_verdict",{}).get("confidence",""),
+                                R.get("org_fit",{}).get("score",""),
+                                R.get("direction_fit",{}).get("score",""),
+                                R.get("leadership_readiness",{}).get("score",""),
+                                d.get("cognitive_ability",{}).get("score",""),
+                                d.get("job_expertise",{}).get("score",""),
+                                d.get("proactiveness",{}).get("score",""),
+                                d.get("leadership",{}).get("score",""),
+                                R.get("burnout_risk",{}).get("level",""),
+                                R.get("turnover_risk",{}).get("level",""),
+                                sn.get("score","") if sn.get("available") else "",
+                                p.get("major",""),
+                                p.get("university",""),
+                                p.get("education_level",""),
+                                p.get("region",""),
+                                R.get("credential_performance",{}).get("alignment",""),
+                                R.get("career_track",{}).get("recommended_track",""),
+                                R.get("candidate_summary",""),
+                                R.get("rebalancing_verdict",{}).get("rationale",""),
+                            ])
+                        # 열 너비
+                        widths = [6,10,16,8,12,7,8,9,9,8,8,8,8,8,8,8,12,12,9,10,11,14,36,46]
+                        for i, w in enumerate(widths, 1):
+                            ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
+
+                        buf = _io.BytesIO()
+                        wb.save(buf)
+                        st.download_button(
+                            "⬇ 엑셀(.xlsx) 다운로드",
+                            data=buf.getvalue(),
+                            file_name=f"인재분석_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True
+                        )
+                    except Exception as e:
+                        st.caption(f"엑셀 생성 오류: {e}")
+
+                st.markdown('<div style="height:1.5rem;"></div>', unsafe_allow_html=True)
+
+                # 개별 상세 결과
+                st.markdown("""
+                <div class="section-header">
+                    <span class="section-num">08</span>
+                    <span class="section-title">개별 상세 결과</span>
+                    <div class="section-rule"></div>
+                </div>
+                """, unsafe_allow_html=True)
+                for br in st.session_state["bulk_results"]:
+                    icon = "✅" if br["success"] else "❌"
+                    with st.expander(f"{icon}  {br['name']} · {br.get('dept','')}"):
+                        if br["success"]:
+                            render_result(br["result"], br["name"])
+                        else:
+                            st.error(f"분석 실패: {br.get('error','')}")
+
+                if st.button("🔄  초기화 (새 대량 분석 시작)", use_container_width=True, key="b_reset"):
+                    st.session_state["bulk_list"]    = []
                     st.session_state["bulk_results"] = []
-                    n_t = len(st.session_state["bulk_list"])
-                    prog = st.progress(0, text="분석 준비 중...")
-                    for k, cand in enumerate(st.session_state["bulk_list"]):
-                        prog.progress(k / n_t, text=f"({k+1}/{n_t}) {cand['name']} ...")
-                        ups = pending_files.get(k)
-                        if not ups:
-                            st.session_state["bulk_results"].append({
-                                "name": cand["name"], "dept": cand.get("dept", ""),
-                                "result": {}, "success": False, "error": "자료 미업로드"})
-                            prog.progress((k + 1) / n_t)
+                    st.session_state["bulk_done"]    = False
+                    st.rerun()
+        else:
+            st.markdown('<p style="font-size:0.82rem;color:#B0A898;text-align:center;padding:2rem 0;">위 폼에서 대상자를 추가해주세요.</p>', unsafe_allow_html=True)
+
+    with sub_auto:
+        st.markdown("""
+        <div class="section-header">
+            <span class="section-num">01</span>
+            <span class="section-title">자료 일괄 업로드 · 파일명 자동 인식</span>
+            <div class="section-rule"></div>
+        </div>
+        <p style="font-size:0.8rem;color:#7A7268;margin-bottom:1rem;">
+            여러 자료를 한꺼번에 올리면 <b>파일명에 들어있는 이름</b>을 인식해 사람별로 자동 분류·등록합니다.
+            예: <code>홍길동_이력서.pdf</code>, <code>홍길동 MBTI.png</code>, <code>김철수-자기소개서.docx</code>.
+            등록 내용을 확인한 뒤 <b>분석 시작</b>만 누르면 일괄 분석돼요.
+        </p>
+        """, unsafe_allow_html=True)
+
+        if "auto_results" not in st.session_state: st.session_state["auto_results"] = []
+        if "auto_done"    not in st.session_state: st.session_state["auto_done"]    = False
+
+        _orgA = load_org_data()
+        _doneA = {r.get("candidate_name", "") for r in load_archive() if r.get("candidate_name")}
+        _deptA = {}
+        _rosterA = []
+        if _orgA:
+            for _bn, _bd in _orgA.items():
+                _bdir = _bd.get("_직속", {})
+                for _p in (_bdir.get("_직속", []) if isinstance(_bdir, dict) else []):
+                    _deptA[_p["name"]] = f"{_bn} / (본부 직속)"
+                for _tn, _td in _bd.items():
+                    if _tn == "_직속":
+                        continue
+                    for _p in _td.get("_직속", []):
+                        _deptA[_p["name"]] = f"{_bn} / {_tn}"
+                    for _pn, _pl in _td.items():
+                        if _pn == "_직속":
                             continue
+                        for _p in _pl:
+                            _deptA[_p["name"]] = f"{_bn} / {_tn} · {_pn}"
+            _rosterA = sorted(_deptA.keys(), key=len, reverse=True)  # 긴 이름 우선 매칭
+
+        import re as _re
+        def _match_name(fn):
+            base = fn.rsplit(".", 1)[0]
+            for nm in _rosterA:
+                if nm and nm in base:
+                    return nm
+            for tok in _re.split(r"[\s_\-.()\[\]]+", base):
+                if _re.fullmatch(r"[가-힣]{2,4}", tok):
+                    return tok
+            return None
+
+        auto_files = st.file_uploader(
+            "자료 일괄 업로드 (여러 파일 동시 선택)",
+            type=["pdf", "docx", "jpg", "jpeg", "png", "webp", "txt", "md"],
+            accept_multiple_files=True, key="auto_uploader")
+
+        if auto_files and not st.session_state["auto_done"]:
+            grouped, unmatched = {}, []
+            for f in auto_files:
+                nm = _match_name(f.name)
+                if nm:
+                    grouped.setdefault(nm, []).append(f)
+                else:
+                    unmatched.append(f)
+            names_sorted = sorted(grouped.keys())
+
+            st.markdown(
+                f'<div style="display:flex;gap:1.2rem;flex-wrap:wrap;margin:0.6rem 0 0.8rem;font-size:0.82rem;color:#7A7268;">'
+                f'<span>업로드 파일 <b style="color:#1A1714;">{len(auto_files)}</b>개</span>'
+                f'<span>인식된 대상자 <b style="color:#2D6A4F;">{len(names_sorted)}</b>명</span>'
+                f'<span>인식 실패 <b style="color:#B0392B;">{len(unmatched)}</b>개</span></div>',
+                unsafe_allow_html=True)
+
+            st.markdown("""
+            <div class="section-header" style="margin-top:0.6rem;">
+                <span class="section-num">02</span>
+                <span class="section-title">자동 등록된 대상자 · 자료 확인</span>
+                <div class="section-rule"></div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            for nm in names_sorted:
+                fs = grouped[nm]
+                tag = "✅" if nm in _doneA else "⚪"
+                dept = _deptA.get(nm, "(명부 외)")
+                fnames = " · ".join(f.name for f in fs)
+                st.markdown(
+                    f'<div style="background:white;border:1px solid #D4CEC4;border-radius:6px;'
+                    f'padding:0.6rem 1rem;border-left:3px solid #B8924A;margin-bottom:0.45rem;">'
+                    f'<span style="font-size:0.95rem;">{tag}</span> '
+                    f'<b style="font-size:0.92rem;color:#1A1714;">{nm}</b> '
+                    f'<span style="font-size:0.74rem;color:#7A7268;">· {dept}</span> '
+                    f'<span style="font-size:0.74rem;color:#2D6A4F;font-weight:700;">· {len(fs)}개 자료</span>'
+                    f'<div style="font-size:0.72rem;color:#B0A898;margin-top:0.25rem;">📎 {fnames}</div></div>',
+                    unsafe_allow_html=True)
+
+            if unmatched:
+                with st.expander(f"⚠️ 이름 인식 실패 {len(unmatched)}개 (분석 제외됨)"):
+                    for f in unmatched:
+                        st.markdown(f"- {f.name}")
+                    st.caption("파일명에 명부상의 이름이 정확히 포함되도록 바꿔서 다시 올리면 인식됩니다.")
+
+            st.markdown('<div style="height:0.7rem;"></div>', unsafe_allow_html=True)
+            if st.button(f"◈  분석 시작 ({len(names_sorted)}명 일괄 분석)", use_container_width=True, key="auto_run"):
+                if not names_sorted:
+                    st.error("⚠️ 이름이 인식된 대상자가 없습니다. 파일명을 확인해주세요.")
+                else:
+                    st.session_state["auto_results"] = []
+                    n_t = len(names_sorted)
+                    prog = st.progress(0, text="분석 준비 중...")
+                    for k, nm in enumerate(names_sorted):
+                        prog.progress(k / n_t, text=f"({k+1}/{n_t}) {nm} 분석 중...")
                         try:
-                            fd = {uf.name: read_file_content(uf) for uf in ups}
-                            if cand.get("dept"): fd["소속 부서"] = cand["dept"]
+                            fd = {f.name: read_file_content(f) for f in grouped[nm]}
+                            dept = _deptA.get(nm, "")
+                            if dept: fd["소속 부서"] = dept
                             fd["회사 인재상"] = company_standard
                             fd["회사 5대 핵심문화 축"] = core_culture
                             fd["회사 향후 방향성"] = company_direction
-                            R = analyze_candidate(api_key, fd, cand["name"], company_standard)
-                            st.session_state["bulk_results"].append({
-                                "name": cand["name"], "dept": cand.get("dept", ""),
-                                "result": R, "success": True})
-                            save_to_archive({
-                                "saved_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                                "candidate_name": cand["name"], "dept": cand.get("dept", ""),
-                                "result": R})
+                            R = analyze_candidate(api_key, fd, nm, company_standard)
+                            st.session_state["auto_results"].append({"name": nm, "dept": dept, "result": R, "success": True})
+                            save_to_archive({"saved_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                             "candidate_name": nm, "dept": dept, "result": R})
                         except Exception as e:
-                            st.session_state["bulk_results"].append({
-                                "name": cand["name"], "dept": cand.get("dept", ""),
-                                "result": {}, "success": False, "error": str(e)})
-                        prog.progress((k + 1) / n_t, text=f"({k+1}/{n_t}) {cand['name']} 완료")
+                            st.session_state["auto_results"].append({"name": nm, "dept": _deptA.get(nm, ""), "result": {}, "success": False, "error": str(e)})
+                        prog.progress((k + 1) / n_t, text=f"({k+1}/{n_t}) {nm} 완료")
                     prog.progress(1.0, text="✅ 분석 완료!")
-                    st.session_state["bulk_done"] = True
+                    st.session_state["auto_done"] = True
                     st.rerun()
+        elif not st.session_state["auto_done"]:
+            st.markdown('<p style="font-size:0.82rem;color:#B0A898;text-align:center;padding:1.5rem 0;">위에서 자료를 올리면 파일명으로 대상자를 자동 인식합니다.</p>', unsafe_allow_html=True)
 
-        # ── 대량 분석 결과 ──
-        if st.session_state["bulk_done"] and st.session_state["bulk_results"]:
+        # ── 자동 분석 결과 ──
+        if st.session_state["auto_done"] and st.session_state["auto_results"]:
             st.markdown("""
-            <div class="section-header" style="margin-top:2rem;">
+            <div class="section-header" style="margin-top:1.5rem;">
                 <span class="section-num">03</span>
-                <span class="section-title">대량 분석 결과 요약</span>
+                <span class="section-title">자동 분석 결과</span>
                 <div class="section-rule"></div>
             </div>
             """, unsafe_allow_html=True)
 
-            # 비교 테이블 (종합 점수 순위 + 리밸런싱 판정 포함)
-            dim_keys  = ["cognitive_ability","job_expertise","proactiveness","leadership"]
-            dim_names = ["인지","전문성","적극성","리더십"]
-            re_emoji  = {"LOW":"🟢","MEDIUM":"🟡","HIGH":"🔴","CRITICAL":"🔴"}.get
-            verdict_emoji = {"KEEP":"✅","DEVELOP":"📈","WATCH":"👁","MISFIT":"⚠️"}.get
-
-            # 종합 점수 계산 후 내림차순 정렬 (분석 실패 건은 맨 아래)
-            scored = []
-            for br in st.session_state["bulk_results"]:
+            _dimk = ["cognitive_ability", "job_expertise", "proactiveness", "leadership"]
+            _dimn = ["인지", "전문성", "적극성", "리더십"]
+            _re_e = {"LOW": "🟢", "MEDIUM": "🟡", "HIGH": "🔴", "CRITICAL": "🔴"}.get
+            _ve = {"KEEP": "✅", "DEVELOP": "📈", "WATCH": "👁", "MISFIT": "⚠️"}.get
+            _scored = []
+            for br in st.session_state["auto_results"]:
                 ov = compute_overall_score(br["result"])[0] if br["success"] else None
-                scored.append((ov if ov is not None else -1, br, ov))
-            scored.sort(key=lambda x: x[0], reverse=True)
-
-            rows_header = "| 순위 | 종합 | 이름 | 부서 | 판정 | 조직적합 | 리더십 | " + " | ".join(dim_names) + " | 번아웃 | 이직 |"
-            _ncols = rows_header.count("|") - 1
-            rows = [rows_header, "|" + "|".join([":---:"] * _ncols) + "|"]
-            rank = 0
-            for _, br, ov in scored:
+                _scored.append((ov if ov is not None else -1, br, ov))
+            _scored.sort(key=lambda x: x[0], reverse=True)
+            _hdr = "| 순위 | 종합 | 이름 | 부서 | 판정 | " + " | ".join(_dimn) + " | 번아웃 | 이직 |"
+            _nc = _hdr.count("|") - 1
+            _rows = [_hdr, "|" + "|".join([":---:"] * _nc) + "|"]
+            _rk = 0
+            for _, br, ov in _scored:
                 if not br["success"]:
-                    rows.append(f"| - | - | {br['name']} | {br['dept']} | ❌ | | | | | | | | |")
+                    _rows.append(f"| - | - | {br['name']} | {br['dept']} | ❌ | | | | | | |")
                     continue
-                rank += 1
-                medal = {1:"🥇",2:"🥈",3:"🥉"}.get(rank, str(rank))
+                _rk += 1
+                _md = {1: "🥇", 2: "🥈", 3: "🥉"}.get(_rk, str(_rk))
                 R = br["result"]
-                dims    = R.get("dimensions", {})
-                scores  = [str(dims.get(k,{}).get("score","?")) for k in dim_keys]
-                b_lvl   = R.get("burnout_risk",{}).get("level","?")
-                t_lvl   = R.get("turnover_risk",{}).get("level","?")
-                verdict = R.get("rebalancing_verdict",{}).get("decision","?")
-                of_sc   = R.get("org_fit",{}).get("score","?")
-                lr_sc   = R.get("leadership_readiness",{}).get("score","?")
-                rows.append(f"| {medal} | **{ov}** | **{br['name']}** | {br['dept']} | {verdict_emoji(verdict,'⚪')} {verdict} | {of_sc} | {lr_sc} | {' | '.join(scores)} | {re_emoji(b_lvl,'⚪')} | {re_emoji(t_lvl,'⚪')} |")
-            st.markdown("\n".join(rows))
+                _dm = R.get("dimensions", {})
+                _sc = [str(_dm.get(k, {}).get("score", "?")) for k in _dimk]
+                _bl = R.get("burnout_risk", {}).get("level", "?")
+                _tl = R.get("turnover_risk", {}).get("level", "?")
+                _vd = R.get("rebalancing_verdict", {}).get("decision", "?")
+                _rows.append(f"| {_md} | **{ov}** | **{br['name']}** | {br['dept']} | {_ve(_vd,'⚪')} {_vd} | {' | '.join(_sc)} | {_re_e(_bl,'⚪')} | {_re_e(_tl,'⚪')} |")
+            st.markdown("\n".join(_rows))
+            st.markdown('<p style="font-size:0.7rem;color:#B0A898;margin-top:0.5rem;">종합 점수 높은 순 · 판정: ✅ KEEP · 📈 DEVELOP · 👁 WATCH · ⚠️ MISFIT</p>', unsafe_allow_html=True)
 
             st.markdown("""
-            <p style="font-size:0.7rem;color:#B0A898;margin-top:0.5rem;">
-            종합 점수 높은 순으로 정렬 · 종합 = 세부 점수 가중합(역량35%·조직적합30%·리더십준비15%·저위험20%)
-            <br>판정: ✅ KEEP(핵심·유지) · 📈 DEVELOP(육성) · 👁 WATCH(관찰) · ⚠️ MISFIT(부적합)
-            &nbsp;|&nbsp; 모든 점수 100점 만점
-            </p>
-            """, unsafe_allow_html=True)
-
-            # ── 집단 비교 분석 ──
-            st.markdown("""
-            <div class="section-header" style="margin-top:2rem;">
+            <div class="section-header" style="margin-top:1.5rem;">
                 <span class="section-num">04</span>
-                <span class="section-title">집단 비교 분석</span>
-                <div class="section-rule"></div>
-            </div>
-            <p style="font-size:0.78rem;color:#7A7268;margin-bottom:1rem;">
-                부서·판정 분포를 한눈에 파악합니다.
-            </p>
-            """, unsafe_allow_html=True)
-
-            ok_results = [br for br in st.session_state["bulk_results"] if br["success"]]
-
-            # 판정 분포
-            verdict_count = {}
-            for br in ok_results:
-                v = br["result"].get("rebalancing_verdict",{}).get("decision","미분류")
-                verdict_count[v] = verdict_count.get(v, 0) + 1
-
-            vc1, vc2, vc3, vc4 = st.columns(4)
-            v_meta = [("KEEP","✅","#2D6A4F"),("DEVELOP","📈","#2B3D5C"),("WATCH","👁","#8B6914"),("MISFIT","⚠️","#8B2635")]
-            for col, (vk, emoji, vcolor) in zip([vc1,vc2,vc3,vc4], v_meta):
-                with col:
-                    cnt = verdict_count.get(vk, 0)
-                    st.markdown(f"""
-                    <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;
-                                padding:1.2rem;text-align:center;border-top:3px solid {vcolor};">
-                        <div style="font-size:1.5rem;">{emoji}</div>
-                        <div style="font-family:'DM Serif Display',serif;font-size:2rem;
-                                    color:{vcolor};font-style:italic;">{cnt}</div>
-                        <div style="font-size:0.65rem;letter-spacing:1px;color:#7A7268;
-                                    text-transform:uppercase;">{vk}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-            # 부서별 평균
-            from collections import defaultdict
-            dept_data = defaultdict(list)
-            for br in ok_results:
-                dept_data[br["dept"] or "미지정"].append(br["result"])
-
-            if len(dept_data) > 1:
-                st.markdown('<div style="height:1rem;"></div>', unsafe_allow_html=True)
-                st.markdown('<p style="font-size:0.75rem;font-weight:600;color:#3D3830;margin-bottom:0.5rem;">📊 부서별 평균 역량</p>', unsafe_allow_html=True)
-                drows = ["| 부서 | 인원 | 종합 | 인지 | 전문성 | 적극성 | 리더십 | 조직적합 |",
-                         "|------|:---:|:---:|:---:|:---:|:---:|:---:|:---:|"]
-                for dept, results in dept_data.items():
-                    n = len(results)
-                    def avg(key, sub="score"):
-                        vals = [r.get("dimensions",{}).get(key,{}).get(sub,0) for r in results]
-                        vals = [v for v in vals if isinstance(v,(int,float))]
-                        return round(sum(vals)/len(vals)) if vals else "-"
-                    of_vals = [r.get("org_fit",{}).get("score",0) for r in results]
-                    of_vals = [v for v in of_vals if isinstance(v,(int,float))]
-                    of_avg = round(sum(of_vals)/len(of_vals)) if of_vals else "-"
-                    ov_vals = [compute_overall_score(r)[0] for r in results]
-                    ov_vals = [v for v in ov_vals if isinstance(v,(int,float))]
-                    ov_avg = round(sum(ov_vals)/len(ov_vals)) if ov_vals else "-"
-                    drows.append(f"| {dept} | {n} | **{ov_avg}** | {avg('cognitive_ability')} | {avg('job_expertise')} | {avg('proactiveness')} | {avg('leadership')} | {of_avg} |")
-                st.markdown("\n".join(drows))
-
-            # ── 리더 적합성 스크리닝 ──
-            st.markdown("""
-            <div class="section-header" style="margin-top:1.8rem;">
-                <span class="section-num">05</span>
-                <span class="section-title">리더 적합성 스크리닝</span>
-                <div class="section-rule"></div>
-            </div>
-            """, unsafe_allow_html=True)
-            lead_buckets = {"즉시 가능 (80+)": [], "육성 후 가능 (60–79)": [], "현재 부적합 (<60)": []}
-            for br in ok_results:
-                lr = br["result"].get("leadership_readiness", {}).get("score")
-                if not isinstance(lr, (int, float)):
-                    continue
-                if lr >= 80:   lead_buckets["즉시 가능 (80+)"].append((br["name"], lr))
-                elif lr >= 60: lead_buckets["육성 후 가능 (60–79)"].append((br["name"], lr))
-                else:          lead_buckets["현재 부적합 (<60)"].append((br["name"], lr))
-            lb_cols = st.columns(3)
-            lb_meta = [("즉시 가능 (80+)", "#2D6A4F"), ("육성 후 가능 (60–79)", "#2B3D5C"), ("현재 부적합 (<60)", "#8B2635")]
-            for col, (label, color) in zip(lb_cols, lb_meta):
-                people = sorted(lead_buckets[label], key=lambda x: x[1], reverse=True)
-                names_html = "".join(
-                    f'<div style="font-size:0.75rem;color:#3D3830;margin:2px 0;">{n} <b style="color:{color};">{s}</b></div>'
-                    for n, s in people
-                ) or '<div style="font-size:0.72rem;color:#B0A898;">해당 없음</div>'
-                with col:
-                    st.markdown(f"""
-                    <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;padding:1rem 1.1rem;border-top:3px solid {color};">
-                        <div style="font-size:0.64rem;font-weight:700;letter-spacing:1px;color:{color};text-transform:uppercase;margin-bottom:0.5rem;">{label} · {len(people)}명</div>
-                        {names_html}
-                    </div>
-                    """, unsafe_allow_html=True)
-
-            # ── MISFIT·WATCH 공통 특징 추출 ──
-            from collections import Counter
-            risk_people = [br for br in ok_results
-                           if br["result"].get("rebalancing_verdict", {}).get("decision") in ("MISFIT", "WATCH")]
-            if risk_people:
-                tag_counter = Counter()
-                for br in risk_people:
-                    for t in br["result"].get("personality_tags", []):
-                        tag_counter[t] += 1
-                common = [(t, c) for t, c in tag_counter.most_common(8) if c >= 2]
-                def _avg_field(people, getter):
-                    vals = [getter(br["result"]) for br in people]
-                    vals = [v for v in vals if isinstance(v, (int, float))]
-                    return round(sum(vals) / len(vals)) if vals else "-"
-                avg_of = _avg_field(risk_people, lambda R: R.get("org_fit", {}).get("score"))
-                avg_ov = _avg_field(risk_people, lambda R: compute_overall_score(R)[0])
-                names = ", ".join(br["name"] for br in risk_people)
-                tags_html = "".join(
-                    f'<span style="display:inline-block;background:#FAEAEC;border:1px solid #E6C9CE;border-radius:4px;padding:2px 9px;margin:2px;font-size:0.72rem;color:#8B2635;">{t} ×{c}</span>'
-                    for t, c in common
-                ) or '<span style="font-size:0.73rem;color:#B0A898;">2명 이상이 공유하는 공통 태그 없음</span>'
-                st.markdown("""
-                <div class="section-header" style="margin-top:1.8rem;">
-                    <span class="section-num">06</span>
-                    <span class="section-title">MISFIT · WATCH 공통 특징 (제외 기준 패턴)</span>
-                    <div class="section-rule"></div>
-                </div>
-                """, unsafe_allow_html=True)
-                st.markdown(f"""
-                <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;padding:1.2rem 1.4rem;border-left:3px solid #8B2635;">
-                    <div style="font-size:0.74rem;color:#7A7268;margin-bottom:0.6rem;">대상 {len(risk_people)}명 · 평균 종합 {avg_ov} · 평균 조직적합 {avg_of}</div>
-                    <div style="font-size:0.7rem;color:#B0A898;margin-bottom:0.4rem;">공유 성향 태그</div>
-                    <div>{tags_html}</div>
-                    <div style="font-size:0.7rem;color:#7A7268;margin-top:0.7rem;">대상자: {names}</div>
-                </div>
-                <p style="font-size:0.68rem;color:#B0A898;margin-top:0.5rem;">※ 자동 추출된 통계 패턴입니다. 개인 인사 판단은 반드시 추가 검토를 거치세요.</p>
-                """, unsafe_allow_html=True)
-
-            # ── 집단 비교 (전공·대학·학력·출신지역) ──
-            def group_overall_table(field_label, getter):
-                groups = defaultdict(list)
-                for br in ok_results:
-                    key = getter(br["result"]) or "미상"
-                    if not key or key == "자료 미제공":
-                        key = "미상"
-                    ov = compute_overall_score(br["result"])[0]
-                    if isinstance(ov, (int, float)):
-                        groups[key].append(ov)
-                if not [k for k in groups if k != "미상"]:
-                    return None
-                rows = [f"| {field_label} | 인원 | 평균 종합 |", "|------|:---:|:---:|"]
-                for k, vals in sorted(groups.items(), key=lambda kv: sum(kv[1]) / len(kv[1]), reverse=True):
-                    rows.append(f"| {k} | {len(vals)} | **{round(sum(vals)/len(vals))}** |")
-                return "\n".join(rows)
-
-            group_specs = [
-                ("학력수준", lambda R: R.get("profile", {}).get("education_level")),
-                ("전공",     lambda R: R.get("profile", {}).get("major")),
-                ("대학",     lambda R: R.get("profile", {}).get("university")),
-                ("출신지역", lambda R: R.get("profile", {}).get("region")),
-            ]
-            group_tables = [(lbl, group_overall_table(lbl, g)) for lbl, g in group_specs]
-            group_tables = [(lbl, t) for lbl, t in group_tables if t]
-            if group_tables:
-                st.markdown("""
-                <div class="section-header" style="margin-top:1.8rem;">
-                    <span class="section-num">07</span>
-                    <span class="section-title">집단 비교 · 전공·대학·학력·지역</span>
-                    <div class="section-rule"></div>
-                </div>
-                <p style="font-size:0.72rem;color:#B0A898;margin-bottom:0.6rem;">
-                    프로필이 추출된 인원만 집계됩니다(미추출은 '미상'). '학력수준'으로 고학력=고성과 여부를 가늠할 수 있습니다.
-                    출신지역은 통계 참고용이며 개인 점수에는 반영되지 않습니다.
-                </p>
-                """, unsafe_allow_html=True)
-                for lbl, t in group_tables:
-                    st.markdown(f'<p style="font-size:0.74rem;font-weight:600;color:#3D3830;margin:0.7rem 0 0.3rem;">📊 {lbl}별 평균 종합 점수</p>', unsafe_allow_html=True)
-                    st.markdown(t)
-
-            st.markdown('<div style="height:1.5rem;"></div>', unsafe_allow_html=True)
-
-            # ── 다운로드 (JSON + Excel) ──
-            dl1, dl2 = st.columns(2)
-            with dl1:
-                export_bulk = [{"name":br["name"],"dept":br["dept"],"result":br.get("result",{})} for br in ok_results]
-                st.download_button(
-                    "⬇ 전체 결과 JSON",
-                    data=json.dumps(export_bulk, ensure_ascii=False, indent=2).encode("utf-8"),
-                    file_name=f"bulk_analysis_{datetime.now().strftime('%Y%m%d_%H%M')}.json",
-                    mime="application/json", use_container_width=True
-                )
-            with dl2:
-                # Excel 생성
-                try:
-                    import io as _io
-                    import openpyxl
-                    from openpyxl.styles import Font, PatternFill, Alignment
-
-                    wb = openpyxl.Workbook()
-                    ws = wb.active
-                    ws.title = "인재분석결과"
-                    headers = ["순위","이름","부서","종합점수","리밸런싱판정","신뢰도","조직적합도","방향성적합도","리더십준비도",
-                               "인지능력","잡전문성","적극성","리더십",
-                               "번아웃","이직위험","SNS점수","전공","대학","학력수준","출신지역",
-                               "학력성과정합","추천커리어트랙","한줄평","리밸런싱근거"]
-                    ws.append(headers)
-                    for c in range(1, len(headers)+1):
-                        cell = ws.cell(row=1, column=c)
-                        cell.font = Font(bold=True, color="FFFFFF", size=10)
-                        cell.fill = PatternFill("solid", fgColor="1A1714")
-                        cell.alignment = Alignment(horizontal="center", vertical="center")
-
-                    # 종합 점수 내림차순 정렬 후 순위 부여
-                    excel_sorted = sorted(
-                        ok_results,
-                        key=lambda br: (compute_overall_score(br["result"])[0] or 0),
-                        reverse=True
-                    )
-                    for rank_i, br in enumerate(excel_sorted, 1):
-                        R = br["result"]
-                        d = R.get("dimensions",{})
-                        p = R.get("profile",{})
-                        sn = R.get("sns_analysis",{})
-                        ov = compute_overall_score(R)[0]
-                        ws.append([
-                            rank_i,
-                            br["name"], br["dept"],
-                            ov if ov is not None else "",
-                            R.get("rebalancing_verdict",{}).get("decision",""),
-                            R.get("rebalancing_verdict",{}).get("confidence",""),
-                            R.get("org_fit",{}).get("score",""),
-                            R.get("direction_fit",{}).get("score",""),
-                            R.get("leadership_readiness",{}).get("score",""),
-                            d.get("cognitive_ability",{}).get("score",""),
-                            d.get("job_expertise",{}).get("score",""),
-                            d.get("proactiveness",{}).get("score",""),
-                            d.get("leadership",{}).get("score",""),
-                            R.get("burnout_risk",{}).get("level",""),
-                            R.get("turnover_risk",{}).get("level",""),
-                            sn.get("score","") if sn.get("available") else "",
-                            p.get("major",""),
-                            p.get("university",""),
-                            p.get("education_level",""),
-                            p.get("region",""),
-                            R.get("credential_performance",{}).get("alignment",""),
-                            R.get("career_track",{}).get("recommended_track",""),
-                            R.get("candidate_summary",""),
-                            R.get("rebalancing_verdict",{}).get("rationale",""),
-                        ])
-                    # 열 너비
-                    widths = [6,10,16,8,12,7,8,9,9,8,8,8,8,8,8,8,12,12,9,10,11,14,36,46]
-                    for i, w in enumerate(widths, 1):
-                        ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
-
-                    buf = _io.BytesIO()
-                    wb.save(buf)
-                    st.download_button(
-                        "⬇ 엑셀(.xlsx) 다운로드",
-                        data=buf.getvalue(),
-                        file_name=f"인재분석_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        use_container_width=True
-                    )
-                except Exception as e:
-                    st.caption(f"엑셀 생성 오류: {e}")
-
-            st.markdown('<div style="height:1.5rem;"></div>', unsafe_allow_html=True)
-
-            # 개별 상세 결과
-            st.markdown("""
-            <div class="section-header">
-                <span class="section-num">08</span>
                 <span class="section-title">개별 상세 결과</span>
                 <div class="section-rule"></div>
             </div>
             """, unsafe_allow_html=True)
-            for br in st.session_state["bulk_results"]:
+            for br in st.session_state["auto_results"]:
                 icon = "✅" if br["success"] else "❌"
                 with st.expander(f"{icon}  {br['name']} · {br.get('dept','')}"):
                     if br["success"]:
@@ -2628,13 +2823,11 @@ with tab_bulk:
                     else:
                         st.error(f"분석 실패: {br.get('error','')}")
 
-            if st.button("🔄  초기화 (새 대량 분석 시작)", use_container_width=True, key="b_reset"):
-                st.session_state["bulk_list"]    = []
-                st.session_state["bulk_results"] = []
-                st.session_state["bulk_done"]    = False
+            if st.button("🔄  초기화 (새 자동 분석 시작)", use_container_width=True, key="auto_reset"):
+                st.session_state["auto_results"] = []
+                st.session_state["auto_done"] = False
                 st.rerun()
-    else:
-        st.markdown('<p style="font-size:0.82rem;color:#B0A898;text-align:center;padding:2rem 0;">위 폼에서 대상자를 추가해주세요.</p>', unsafe_allow_html=True)
+
 
 
 # ════════════════════════════════════════════════════════
