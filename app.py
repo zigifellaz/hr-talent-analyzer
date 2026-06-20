@@ -762,32 +762,73 @@ def analyze_candidate(api_key, file_data, candidate_name, company_standard):
 - 재직 의향 신호: 장기 프로젝트 참여도, 조직 애착 언어, 커리어 방향성
 근거 자료: 이력서 재직 기간 패턴, SNS 활동, 다면평가 몰입도, 기안서 미래 지향성 등 교차 분석
 
+━━━━━━━━━━━━━━━━━━━━━━━━
+추가 분석 항목 (신규)
+━━━━━━━━━━━━━━━━━━━━━━━━
+[프로필 구조화 추출 - Profile]
+- 제공된 자료에서 전공(major), 출신 대학(university), 최종 학력 수준(education_level), 출신 지역(region)을 추출합니다.
+- education_level은 '박사 / 석사 / 학사 / 전문학사 / 고졸 / 자료 미제공' 중 하나로 정규화합니다.
+- 확인되지 않는 항목은 '자료 미제공'으로 표기합니다. 추측하지 마십시오.
+
+[역량 세부 점수 - Sub-scores]
+- 4대 역량 각각에 대해, 위에 정의된 4개 세부 기준을 0~100으로 각각 점수화합니다.
+  · 인지 능력: 개념적사고 / 분석적추론 / 학습민첩성 / 의사결정질
+  · 잡 전문성: 직무지식깊이 / 실행역량 / 도메인네트워크 / 글로벌역량
+  · 적극성: 주도성 / 결과지향성 / 변화주도 / 역경극복
+  · 리더십: 영향력행사 / 팀개발 / 전략적방향설정 / 이해관계자관리
+
+[회사 향후 방향성 적합도 - Direction Fit] (100점 만점)
+- '[회사 향후 방향성]' 자료가 제공된 경우, 그 전략 방향과 개인 역량·성향의 정렬도를 별도 점수로 평가합니다.
+- 해당 자료가 없으면 인재상·핵심문화를 근거로 보수적으로 추정하고 그 사실을 summary에 명시합니다.
+
+[SNS 전용 분석 - SNS Analysis] (대외비)
+- SNS 자료가 제공된 경우에만 available=true로 설정하고, 개인 성향(personality)과 내부 조직문화 적합성(culture_fit)을 분석하며 0~100 점수를 부여합니다.
+- SNS 자료가 없으면 available=false로 설정하고 나머지는 빈 문자열로 둡니다. 이 항목은 항상 대외비(confidential=true)입니다.
+
+[분석 자료 커버리지 - Data Coverage]
+- 분석에 실제로 활용된 자료 유형(이력서/기안서/MBTI/인적성/SNS/다면평가/기타)을 나열하고, 근거의 충분성을 HIGH/MEDIUM/LOW로 평가합니다.
+
 반드시 아래 JSON 형식으로만 응답하세요. JSON 외 어떤 텍스트도 출력하지 마세요:
 {
   "candidate_summary": "대상자 핵심 특성 한줄 평가 (50자 이내)",
   "personality_tags": ["태그1","태그2","태그3","태그4","태그5"],
+  "profile": {
+    "major": "전공 (없으면 '자료 미제공')",
+    "university": "출신 대학 (없으면 '자료 미제공')",
+    "education_level": "박사 / 석사 / 학사 / 전문학사 / 고졸 / 자료 미제공 중 택1",
+    "region": "출신 지역 (없으면 '자료 미제공')"
+  },
+  "data_coverage": {
+    "materials": ["활용된 자료 유형 나열"],
+    "confidence": "HIGH / MEDIUM / LOW 중 택1",
+    "note": "1문장. 분석 근거 충분성 평가"
+  },
   "dimensions": {
     "cognitive_ability": {
       "score": 75,
       "grade": "B+",
+      "sub_scores": {"개념적사고": 78, "분석적추론": 72, "학습민첩성": 80, "의사결정질": 70},
       "summary": "3문장 분석. 강점 발현 방식·조직 활용 가능성·잠재 한계 포함",
       "evidence": ["근거1","근거2"]
     },
     "job_expertise": {
       "score": 80,
       "grade": "A",
+      "sub_scores": {"직무지식깊이": 82, "실행역량": 80, "도메인네트워크": 76, "글로벌역량": 78},
       "summary": "3문장 분석",
       "evidence": ["근거1","근거2"]
     },
     "proactiveness": {
       "score": 70,
       "grade": "B",
+      "sub_scores": {"주도성": 72, "결과지향성": 70, "변화주도": 68, "역경극복": 70},
       "summary": "3문장 분석",
       "evidence": ["근거1","근거2"]
     },
     "leadership": {
       "score": 65,
       "grade": "B-",
+      "sub_scores": {"영향력행사": 66, "팀개발": 64, "전략적방향설정": 65, "이해관계자관리": 66},
       "summary": "3문장 분석",
       "evidence": ["근거1","근거2"]
     }
@@ -809,6 +850,13 @@ def analyze_candidate(api_key, file_data, candidate_name, company_standard):
     "retention_signals": "2문장",
     "summary": "2문장 총평 및 리텐션 전략",
     "evidence": ["근거1","근거2"]
+  },
+  "sns_analysis": {
+    "available": false,
+    "score": 0,
+    "personality": "SNS 자료가 있으면 2문장, 없으면 빈 문자열",
+    "culture_fit": "SNS 자료가 있으면 2문장, 없으면 빈 문자열",
+    "confidential": true
   },
   "hiring_keywords": [
     {
@@ -837,6 +885,10 @@ def analyze_candidate(api_key, file_data, candidate_name, company_standard):
     "culture_fit": "5대 핵심문화 축 정합성 1-2문장 평가",
     "direction_alignment": "회사 방향성 정렬도 1-2문장 평가",
     "summary": "2문장. 조직 적합도 종합 및 Misfit 여부 판단"
+  },
+  "direction_fit": {
+    "score": 70,
+    "summary": "2문장. 회사 향후 방향성과 개인의 정렬도. 방향성 자료가 없으면 추정임을 명시"
   },
   "leadership_readiness": {
     "score": 65,
@@ -871,7 +923,7 @@ def analyze_candidate(api_key, file_data, candidate_name, company_standard):
 
     response = client.messages.create(
         model="claude-opus-4-5",
-        max_tokens=10000,
+        max_tokens=16000,
         system=system_prompt,
         messages=[{"role": "user", "content": user_content}]
     )
@@ -918,6 +970,65 @@ def dim_sublabel(k):
 def dim_icon(k):
     return {"cognitive_ability":"🧠","job_expertise":"⚙️",
             "proactiveness":"🔥","leadership":"👑"}.get(k,"◈")
+
+
+# ─── 종합 점수(정량화) ──────────────────────────────────────────
+# 종합 점수 가중치 (합계 1.0). 비중을 바꾸고 싶으면 이 숫자만 수정하면 됩니다.
+#   talent              : 4대 역량 평균 (인지·전문성·적극성·리더십)
+#   org_fit             : 조직 적합도
+#   leadership_readiness: 리더십 준비도
+#   low_risk            : (100 - 번아웃·이직 평균 위험) — 위험이 낮을수록 점수 상승
+OVERALL_WEIGHTS = {
+    "talent":               0.35,
+    "org_fit":              0.30,
+    "leadership_readiness": 0.15,
+    "low_risk":             0.20,
+}
+
+def _safe_num(v):
+    return v if isinstance(v, (int, float)) else 0
+
+def overall_grade(score):
+    if score is None: return "-"
+    if score >= 90: return "S"
+    if score >= 80: return "A"
+    if score >= 70: return "B+"
+    if score >= 60: return "B"
+    if score >= 50: return "B-"
+    return "C"
+
+def overall_color(score):
+    if score is None: return "#7A7268"
+    if score >= 80: return "#2D6A4F"
+    if score >= 60: return "#2B3D5C"
+    if score >= 50: return "#8B6914"
+    return "#8B2635"
+
+def compute_overall_score(R: dict):
+    """이미 계산된 세부 점수들을 가중 합산해 0~100 종합 점수를 산출한다.
+    저장된 기존 분석에도 그대로 적용되므로 재분석이 필요 없다.
+    반환: (점수:int 또는 None, 등급:str)"""
+    if not R:
+        return None, "-"
+    dims = R.get("dimensions", {})
+    dvals = [_safe_num(dims.get(k, {}).get("score")) for k in
+             ("cognitive_ability", "job_expertise", "proactiveness", "leadership")]
+    talent = sum(dvals) / len(dvals) if dvals else 0
+    org_fit = _safe_num(R.get("org_fit", {}).get("score"))
+    lr      = _safe_num(R.get("leadership_readiness", {}).get("score"))
+    burn    = _safe_num(R.get("burnout_risk", {}).get("score"))
+    turn    = _safe_num(R.get("turnover_risk", {}).get("score"))
+    # 세부 점수가 하나도 없으면(분석 실패 등) 종합 점수도 없음
+    if talent == 0 and org_fit == 0 and lr == 0:
+        return None, "-"
+    risk_avg = (burn + turn) / 2
+    w = OVERALL_WEIGHTS
+    score = (w["talent"] * talent
+             + w["org_fit"] * org_fit
+             + w["leadership_readiness"] * lr
+             + w["low_risk"] * (100 - risk_avg))
+    score = int(max(0, min(100, round(score))))
+    return score, overall_grade(score)
 
 
 # ─── 아카이브 함수 (Supabase 영구 저장 + 로컬 폴백) ─────────────────────────
@@ -1066,6 +1177,7 @@ def get_person_status(name: str, archive_by_name: dict) -> tuple:
 # ─── 결과 렌더링 함수 (신규 분석 & 아카이브 조회 공용) ──────────────────────
 def render_result(R: dict, candidate_name: str):
     name_d = candidate_name or "대상자"
+    ov_score, ov_grade = compute_overall_score(R)
     tags_html = "".join(
         f'<span class="tag-chip">{t}</span>'
         for t in R.get("personality_tags", [])
@@ -1078,6 +1190,60 @@ def render_result(R: dict, candidate_name: str):
         <div>{tags_html}</div>
     </div>
     """, unsafe_allow_html=True)
+
+    # ── 종합 점수 (정량화) ──
+    if ov_score is not None:
+        ovc = overall_color(ov_score)
+        st.markdown(f"""
+        <div style="background:white;border:2px solid {ovc};border-radius:12px;
+                    padding:1.3rem 1.8rem;margin-bottom:1.5rem;
+                    display:flex;align-items:center;justify-content:space-between;">
+            <div>
+                <div style="font-size:0.6rem;font-weight:700;letter-spacing:3px;
+                            text-transform:uppercase;color:{ovc};">
+                    Overall Score · 종합 점수
+                </div>
+                <div style="font-size:0.72rem;color:#7A7268;margin-top:0.4rem;line-height:1.6;">
+                    세부 점수 가중합 · 역량 35% · 조직적합 30% · 리더십준비 15% · 저위험 20%
+                </div>
+            </div>
+            <div style="text-align:right;line-height:1;">
+                <span style="font-family:'DM Serif Display',serif;font-size:3rem;
+                             font-style:italic;color:{ovc};">{ov_score}<span style="font-size:1rem;color:#B0A898;">/100</span></span>
+                <div style="font-size:1.05rem;font-weight:800;color:{ovc};margin-top:0.2rem;">{ov_grade}</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # ── 프로필 & 분석 자료 커버리지 ──
+    prof = R.get("profile", {})
+    cov  = R.get("data_coverage", {})
+    if prof or cov:
+        prof_bits = []
+        for lbl, key in [("전공","major"),("대학","university"),("학력","education_level"),("출신지역","region")]:
+            val = prof.get(key)
+            if val and val != "자료 미제공":
+                prof_bits.append(f'<b style="color:#3D3830;">{lbl}</b> {val}')
+        prof_html = " &nbsp;·&nbsp; ".join(prof_bits) if prof_bits else '<span style="color:#B0A898;">프로필 자료 미확인</span>'
+        conf = cov.get("confidence","")
+        conf_color = {"HIGH":"#2D6A4F","MEDIUM":"#8B6914","LOW":"#8B2635"}.get(conf, "#7A7268")
+        mats_html = "".join(
+            f'<span style="display:inline-block;background:#F2EEE6;border:1px solid #E2DDD4;'
+            f'border-radius:4px;padding:1px 7px;margin:1px;font-size:0.66rem;color:#3D3830;">{m}</span>'
+            for m in cov.get("materials", [])
+        )
+        conf_badge = (f'<span style="display:inline-block;background:{conf_color};color:white;'
+                      f'border-radius:4px;padding:1px 8px;font-size:0.66rem;font-weight:700;">근거 신뢰도 {conf or "—"}</span>') if cov else ""
+        st.markdown(f"""
+        <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;
+                    padding:0.9rem 1.3rem;margin-bottom:1.5rem;">
+            <div style="font-size:0.78rem;color:#3D3830;line-height:1.8;">{prof_html}</div>
+            <div style="margin-top:0.5rem;display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap;">
+                {conf_badge}{mats_html}
+            </div>
+            <div style="font-size:0.7rem;color:#7A7268;margin-top:0.4rem;">{cov.get('note','')}</div>
+        </div>
+        """, unsafe_allow_html=True)
 
     # ── 리밸런싱 판정 배너 ──
     rv = R.get("rebalancing_verdict", {})
@@ -1177,6 +1343,26 @@ def render_result(R: dict, candidate_name: str):
             </div>
             """, unsafe_allow_html=True)
 
+    # ── 회사 향후 방향성 적합도 ──
+    df = R.get("direction_fit", {})
+    if df and isinstance(df, dict) and (df.get("summary") or df.get("score")):
+        df_score = df.get("score", 0) or 0
+        df_color = overall_color(df_score)
+        st.markdown(f"""
+        <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;
+                    padding:1.4rem 1.6rem;margin:1.3rem 0 1.5rem;border-left:3px solid {df_color};">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.6rem;">
+                <span style="font-size:0.65rem;font-weight:700;letter-spacing:2px;
+                             text-transform:uppercase;color:{df_color};">🚀 회사 향후 방향성 적합도</span>
+                <span style="font-family:'DM Serif Display',serif;font-size:1.6rem;font-style:italic;color:{df_color};">{df_score}<span style="font-size:0.75rem;color:#B0A898;">/100</span></span>
+            </div>
+            <div style="background:#E2DDD4;border-radius:999px;height:4px;margin-bottom:0.8rem;overflow:hidden;">
+                <div style="width:{df_score}%;height:100%;background:{df_color};border-radius:999px;"></div>
+            </div>
+            <div style="font-size:0.8rem;color:#3D3830;line-height:1.7;">{df.get('summary','')}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
     # ── 역량 차원 ──
     st.markdown("""
     <div class="section-header">
@@ -1196,6 +1382,16 @@ def render_result(R: dict, candidate_name: str):
             f'<div class="evidence-item"><div class="evidence-dot"></div><span>{e}</span></div>'
             for e in info.get("evidence", [])
         )
+        subs = info.get("sub_scores", {})
+        sub_html = ""
+        if isinstance(subs, dict) and subs:
+            chips = "".join(
+                f'<span style="display:inline-block;background:#F2EEE6;border:1px solid #E2DDD4;'
+                f'border-radius:4px;padding:2px 8px;margin:2px;font-size:0.68rem;color:#3D3830;">'
+                f'{k} <b style="color:{gcolor};">{v}</b></span>'
+                for k, v in subs.items()
+            )
+            sub_html = f'<div style="margin:0.3rem 0 0.5rem;">{chips}</div>'
         with (d_col1 if idx % 2 == 0 else d_col2):
             st.markdown(f"""
             <div class="dim-card">
@@ -1216,6 +1412,7 @@ def render_result(R: dict, candidate_name: str):
                     <div class="progress-fill" style="width:{score}%;"></div>
                 </div>
                 <div class="dim-summary">{info.get('summary','')}</div>
+                {sub_html}
                 <div class="evidence-list">{ev_html}</div>
             </div>
             """, unsafe_allow_html=True)
@@ -1435,6 +1632,30 @@ def render_result(R: dict, candidate_name: str):
         </div>
         """, unsafe_allow_html=True)
 
+    # ── SNS 전용 분석 (대외비) ──
+    sns = R.get("sns_analysis", {})
+    if sns and sns.get("available"):
+        sns_score = sns.get("score", 0) or 0
+        sns_color = overall_color(sns_score)
+        st.markdown("""
+        <div class="section-header" style="margin-top:2.5rem;">
+            <span class="section-num">✦</span>
+            <span class="section-title">SNS 기반 성향·문화 적합성 &nbsp;<span style="font-size:0.6rem;background:#8B2635;color:white;padding:1px 7px;border-radius:4px;vertical-align:middle;letter-spacing:1px;">대외비</span></span>
+            <div class="section-rule"></div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.markdown(f"""
+        <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;
+                    padding:1.4rem 1.6rem;margin-bottom:1.5rem;border-left:3px solid {sns_color};">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.6rem;">
+                <span style="font-size:0.65rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:{sns_color};">📱 SNS 적합도</span>
+                <span style="font-family:'DM Serif Display',serif;font-size:1.6rem;font-style:italic;color:{sns_color};">{sns_score}<span style="font-size:0.75rem;color:#B0A898;">/100</span></span>
+            </div>
+            <div style="font-size:0.78rem;color:#3D3830;line-height:1.7;margin-bottom:0.5rem;"><b>성향</b> &nbsp;{sns.get('personality','')}</div>
+            <div style="font-size:0.78rem;color:#3D3830;line-height:1.7;"><b>조직문화 적합</b> &nbsp;{sns.get('culture_fit','')}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
     # ── Overall Insight ──
     st.markdown("""
     <div class="section-header" style="margin-top:2.5rem;">
@@ -1555,6 +1776,13 @@ core_culture = """1) 개방적 소통 탁월성 (Open communication excellence)
 4) 협업 시너지 (Collaborative synergy)
 5) 혁신 리더십 (Innovation leadership)"""
 
+# 회사 향후 방향성 (방향성 적합도 분석에 사용 · 화면에서 수정 가능)
+company_direction = """※ 회사의 향후 전략 방향을 여기에 입력하세요. (예시)
+- 비혈관 스텐트 글로벌 시장 확대 및 해외 인허가 가속
+- R&D 기반 신제품 파이프라인 강화
+- 데이터·디지털 기반 품질·생산 고도화
+- 성과 중심·협업 중심의 조직문화 정착"""
+
 # ── 탭 ──
 tab_single, tab_bulk, tab_org = st.tabs(["👤  개인 분석", "👥  대량 분석", "🏢  조직도"])
 
@@ -1578,6 +1806,7 @@ with tab_single:
         candidate_dept = st.text_input("소속 부서", placeholder="Sales & Marketing Division", key="s_dept")
     company_standard_s = st.text_area("회사 인재상", value=company_standard, height=110, key="s_std")
     core_culture_s     = st.text_area("회사 5대 핵심문화 축", value=core_culture, height=140, key="s_culture")
+    company_direction_s = st.text_area("회사 향후 방향성 (방향성 적합도 분석에 사용)", value=company_direction, height=120, key="s_direction")
 
     # ── 파일 업로드 ──
     st.markdown("""
@@ -1614,6 +1843,7 @@ with tab_single:
     if candidate_dept:        file_data["소속 부서"]            = candidate_dept
     if company_standard_s:    file_data["회사 인재상"]           = company_standard_s
     if core_culture_s:        file_data["회사 5대 핵심문화 축"]   = core_culture_s
+    if company_direction_s:   file_data["회사 향후 방향성"]       = company_direction_s
 
     # ── 분석 결과 안내 ──
     st.markdown("""
@@ -1757,6 +1987,7 @@ with tab_bulk:
                 if b_dept: fd["소속 부서"] = b_dept
                 fd["회사 인재상"]        = company_standard
                 fd["회사 5대 핵심문화 축"] = core_culture
+                fd["회사 향후 방향성"]     = company_direction
                 st.session_state["bulk_list"].append({
                     "name": b_name, "dept": b_dept,
                     "file_data": fd, "file_count": len(b_files)
@@ -1839,17 +2070,29 @@ with tab_bulk:
             </div>
             """, unsafe_allow_html=True)
 
-            # 비교 테이블 (리밸런싱 판정 포함)
+            # 비교 테이블 (종합 점수 순위 + 리밸런싱 판정 포함)
             dim_keys  = ["cognitive_ability","job_expertise","proactiveness","leadership"]
             dim_names = ["인지","전문성","적극성","리더십"]
             re_emoji  = {"LOW":"🟢","MEDIUM":"🟡","HIGH":"🔴","CRITICAL":"🔴"}.get
             verdict_emoji = {"KEEP":"✅","DEVELOP":"📈","WATCH":"👁","MISFIT":"⚠️"}.get
-            rows = ["| 이름 | 부서 | 판정 | 조직적합 | 리더십 | " + " | ".join(dim_names) + " | 번아웃 | 이직 |",
-                    "|------|------|:---:|:---:|:---:|" + "|:---:|" * 4 + "|:---:|:---:|"]
+
+            # 종합 점수 계산 후 내림차순 정렬 (분석 실패 건은 맨 아래)
+            scored = []
             for br in st.session_state["bulk_results"]:
+                ov = compute_overall_score(br["result"])[0] if br["success"] else None
+                scored.append((ov if ov is not None else -1, br, ov))
+            scored.sort(key=lambda x: x[0], reverse=True)
+
+            rows_header = "| 순위 | 종합 | 이름 | 부서 | 판정 | 조직적합 | 리더십 | " + " | ".join(dim_names) + " | 번아웃 | 이직 |"
+            _ncols = rows_header.count("|") - 1
+            rows = [rows_header, "|" + "|".join([":---:"] * _ncols) + "|"]
+            rank = 0
+            for _, br, ov in scored:
                 if not br["success"]:
-                    rows.append(f"| {br['name']} | {br['dept']} | ❌ | | | | | | | | |")
+                    rows.append(f"| - | - | {br['name']} | {br['dept']} | ❌ | | | | | | | | |")
                     continue
+                rank += 1
+                medal = {1:"🥇",2:"🥈",3:"🥉"}.get(rank, str(rank))
                 R = br["result"]
                 dims    = R.get("dimensions", {})
                 scores  = [str(dims.get(k,{}).get("score","?")) for k in dim_keys]
@@ -1858,13 +2101,14 @@ with tab_bulk:
                 verdict = R.get("rebalancing_verdict",{}).get("decision","?")
                 of_sc   = R.get("org_fit",{}).get("score","?")
                 lr_sc   = R.get("leadership_readiness",{}).get("score","?")
-                rows.append(f"| **{br['name']}** | {br['dept']} | {verdict_emoji(verdict,'⚪')} {verdict} | {of_sc} | {lr_sc} | {' | '.join(scores)} | {re_emoji(b_lvl,'⚪')} | {re_emoji(t_lvl,'⚪')} |")
+                rows.append(f"| {medal} | **{ov}** | **{br['name']}** | {br['dept']} | {verdict_emoji(verdict,'⚪')} {verdict} | {of_sc} | {lr_sc} | {' | '.join(scores)} | {re_emoji(b_lvl,'⚪')} | {re_emoji(t_lvl,'⚪')} |")
             st.markdown("\n".join(rows))
 
             st.markdown("""
             <p style="font-size:0.7rem;color:#B0A898;margin-top:0.5rem;">
-            판정: ✅ KEEP(핵심·유지) · 📈 DEVELOP(육성) · 👁 WATCH(관찰) · ⚠️ MISFIT(부적합)
-            &nbsp;|&nbsp; 조직적합·리더십은 100점 만점
+            종합 점수 높은 순으로 정렬 · 종합 = 세부 점수 가중합(역량35%·조직적합30%·리더십준비15%·저위험20%)
+            <br>판정: ✅ KEEP(핵심·유지) · 📈 DEVELOP(육성) · 👁 WATCH(관찰) · ⚠️ MISFIT(부적합)
+            &nbsp;|&nbsp; 모든 점수 100점 만점
             </p>
             """, unsafe_allow_html=True)
 
@@ -1913,8 +2157,8 @@ with tab_bulk:
             if len(dept_data) > 1:
                 st.markdown('<div style="height:1rem;"></div>', unsafe_allow_html=True)
                 st.markdown('<p style="font-size:0.75rem;font-weight:600;color:#3D3830;margin-bottom:0.5rem;">📊 부서별 평균 역량</p>', unsafe_allow_html=True)
-                drows = ["| 부서 | 인원 | 인지 | 전문성 | 적극성 | 리더십 | 조직적합 |",
-                         "|------|:---:|:---:|:---:|:---:|:---:|:---:|"]
+                drows = ["| 부서 | 인원 | 종합 | 인지 | 전문성 | 적극성 | 리더십 | 조직적합 |",
+                         "|------|:---:|:---:|:---:|:---:|:---:|:---:|:---:|"]
                 for dept, results in dept_data.items():
                     n = len(results)
                     def avg(key, sub="score"):
@@ -1924,8 +2168,122 @@ with tab_bulk:
                     of_vals = [r.get("org_fit",{}).get("score",0) for r in results]
                     of_vals = [v for v in of_vals if isinstance(v,(int,float))]
                     of_avg = round(sum(of_vals)/len(of_vals)) if of_vals else "-"
-                    drows.append(f"| {dept} | {n} | {avg('cognitive_ability')} | {avg('job_expertise')} | {avg('proactiveness')} | {avg('leadership')} | {of_avg} |")
+                    ov_vals = [compute_overall_score(r)[0] for r in results]
+                    ov_vals = [v for v in ov_vals if isinstance(v,(int,float))]
+                    ov_avg = round(sum(ov_vals)/len(ov_vals)) if ov_vals else "-"
+                    drows.append(f"| {dept} | {n} | **{ov_avg}** | {avg('cognitive_ability')} | {avg('job_expertise')} | {avg('proactiveness')} | {avg('leadership')} | {of_avg} |")
                 st.markdown("\n".join(drows))
+
+            # ── 리더 적합성 스크리닝 ──
+            st.markdown("""
+            <div class="section-header" style="margin-top:1.8rem;">
+                <span class="section-num">05</span>
+                <span class="section-title">리더 적합성 스크리닝</span>
+                <div class="section-rule"></div>
+            </div>
+            """, unsafe_allow_html=True)
+            lead_buckets = {"즉시 가능 (80+)": [], "육성 후 가능 (60–79)": [], "현재 부적합 (<60)": []}
+            for br in ok_results:
+                lr = br["result"].get("leadership_readiness", {}).get("score")
+                if not isinstance(lr, (int, float)):
+                    continue
+                if lr >= 80:   lead_buckets["즉시 가능 (80+)"].append((br["name"], lr))
+                elif lr >= 60: lead_buckets["육성 후 가능 (60–79)"].append((br["name"], lr))
+                else:          lead_buckets["현재 부적합 (<60)"].append((br["name"], lr))
+            lb_cols = st.columns(3)
+            lb_meta = [("즉시 가능 (80+)", "#2D6A4F"), ("육성 후 가능 (60–79)", "#2B3D5C"), ("현재 부적합 (<60)", "#8B2635")]
+            for col, (label, color) in zip(lb_cols, lb_meta):
+                people = sorted(lead_buckets[label], key=lambda x: x[1], reverse=True)
+                names_html = "".join(
+                    f'<div style="font-size:0.75rem;color:#3D3830;margin:2px 0;">{n} <b style="color:{color};">{s}</b></div>'
+                    for n, s in people
+                ) or '<div style="font-size:0.72rem;color:#B0A898;">해당 없음</div>'
+                with col:
+                    st.markdown(f"""
+                    <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;padding:1rem 1.1rem;border-top:3px solid {color};">
+                        <div style="font-size:0.64rem;font-weight:700;letter-spacing:1px;color:{color};text-transform:uppercase;margin-bottom:0.5rem;">{label} · {len(people)}명</div>
+                        {names_html}
+                    </div>
+                    """, unsafe_allow_html=True)
+
+            # ── MISFIT·WATCH 공통 특징 추출 ──
+            from collections import Counter
+            risk_people = [br for br in ok_results
+                           if br["result"].get("rebalancing_verdict", {}).get("decision") in ("MISFIT", "WATCH")]
+            if risk_people:
+                tag_counter = Counter()
+                for br in risk_people:
+                    for t in br["result"].get("personality_tags", []):
+                        tag_counter[t] += 1
+                common = [(t, c) for t, c in tag_counter.most_common(8) if c >= 2]
+                def _avg_field(people, getter):
+                    vals = [getter(br["result"]) for br in people]
+                    vals = [v for v in vals if isinstance(v, (int, float))]
+                    return round(sum(vals) / len(vals)) if vals else "-"
+                avg_of = _avg_field(risk_people, lambda R: R.get("org_fit", {}).get("score"))
+                avg_ov = _avg_field(risk_people, lambda R: compute_overall_score(R)[0])
+                names = ", ".join(br["name"] for br in risk_people)
+                tags_html = "".join(
+                    f'<span style="display:inline-block;background:#FAEAEC;border:1px solid #E6C9CE;border-radius:4px;padding:2px 9px;margin:2px;font-size:0.72rem;color:#8B2635;">{t} ×{c}</span>'
+                    for t, c in common
+                ) or '<span style="font-size:0.73rem;color:#B0A898;">2명 이상이 공유하는 공통 태그 없음</span>'
+                st.markdown("""
+                <div class="section-header" style="margin-top:1.8rem;">
+                    <span class="section-num">06</span>
+                    <span class="section-title">MISFIT · WATCH 공통 특징 (제외 기준 패턴)</span>
+                    <div class="section-rule"></div>
+                </div>
+                """, unsafe_allow_html=True)
+                st.markdown(f"""
+                <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;padding:1.2rem 1.4rem;border-left:3px solid #8B2635;">
+                    <div style="font-size:0.74rem;color:#7A7268;margin-bottom:0.6rem;">대상 {len(risk_people)}명 · 평균 종합 {avg_ov} · 평균 조직적합 {avg_of}</div>
+                    <div style="font-size:0.7rem;color:#B0A898;margin-bottom:0.4rem;">공유 성향 태그</div>
+                    <div>{tags_html}</div>
+                    <div style="font-size:0.7rem;color:#7A7268;margin-top:0.7rem;">대상자: {names}</div>
+                </div>
+                <p style="font-size:0.68rem;color:#B0A898;margin-top:0.5rem;">※ 자동 추출된 통계 패턴입니다. 개인 인사 판단은 반드시 추가 검토를 거치세요.</p>
+                """, unsafe_allow_html=True)
+
+            # ── 집단 비교 (전공·대학·학력·출신지역) ──
+            def group_overall_table(field_label, getter):
+                groups = defaultdict(list)
+                for br in ok_results:
+                    key = getter(br["result"]) or "미상"
+                    if not key or key == "자료 미제공":
+                        key = "미상"
+                    ov = compute_overall_score(br["result"])[0]
+                    if isinstance(ov, (int, float)):
+                        groups[key].append(ov)
+                if not [k for k in groups if k != "미상"]:
+                    return None
+                rows = [f"| {field_label} | 인원 | 평균 종합 |", "|------|:---:|:---:|"]
+                for k, vals in sorted(groups.items(), key=lambda kv: sum(kv[1]) / len(kv[1]), reverse=True):
+                    rows.append(f"| {k} | {len(vals)} | **{round(sum(vals)/len(vals))}** |")
+                return "\n".join(rows)
+
+            group_specs = [
+                ("학력수준", lambda R: R.get("profile", {}).get("education_level")),
+                ("전공",     lambda R: R.get("profile", {}).get("major")),
+                ("대학",     lambda R: R.get("profile", {}).get("university")),
+                ("출신지역", lambda R: R.get("profile", {}).get("region")),
+            ]
+            group_tables = [(lbl, group_overall_table(lbl, g)) for lbl, g in group_specs]
+            group_tables = [(lbl, t) for lbl, t in group_tables if t]
+            if group_tables:
+                st.markdown("""
+                <div class="section-header" style="margin-top:1.8rem;">
+                    <span class="section-num">07</span>
+                    <span class="section-title">집단 비교 · 전공·대학·학력·지역</span>
+                    <div class="section-rule"></div>
+                </div>
+                <p style="font-size:0.72rem;color:#B0A898;margin-bottom:0.6rem;">
+                    프로필이 추출된 인원만 집계됩니다(미추출은 '미상'). '학력수준'으로 고학력=고성과 여부를 가늠할 수 있습니다.
+                    출신지역은 통계 참고용이며 개인 점수에는 반영되지 않습니다.
+                </p>
+                """, unsafe_allow_html=True)
+                for lbl, t in group_tables:
+                    st.markdown(f'<p style="font-size:0.74rem;font-weight:600;color:#3D3830;margin:0.7rem 0 0.3rem;">📊 {lbl}별 평균 종합 점수</p>', unsafe_allow_html=True)
+                    st.markdown(t)
 
             st.markdown('<div style="height:1.5rem;"></div>', unsafe_allow_html=True)
 
@@ -1949,9 +2307,10 @@ with tab_bulk:
                     wb = openpyxl.Workbook()
                     ws = wb.active
                     ws.title = "인재분석결과"
-                    headers = ["이름","부서","리밸런싱판정","신뢰도","조직적합도","리더십준비도",
+                    headers = ["순위","이름","부서","종합점수","리밸런싱판정","신뢰도","조직적합도","방향성적합도","리더십준비도",
                                "인지능력","잡전문성","적극성","리더십",
-                               "번아웃","이직위험","학력성과정합","추천커리어트랙","한줄평","리밸런싱근거"]
+                               "번아웃","이직위험","SNS점수","전공","대학","학력수준","출신지역",
+                               "학력성과정합","추천커리어트랙","한줄평","리밸런싱근거"]
                     ws.append(headers)
                     for c in range(1, len(headers)+1):
                         cell = ws.cell(row=1, column=c)
@@ -1959,14 +2318,26 @@ with tab_bulk:
                         cell.fill = PatternFill("solid", fgColor="1A1714")
                         cell.alignment = Alignment(horizontal="center", vertical="center")
 
-                    for br in ok_results:
+                    # 종합 점수 내림차순 정렬 후 순위 부여
+                    excel_sorted = sorted(
+                        ok_results,
+                        key=lambda br: (compute_overall_score(br["result"])[0] or 0),
+                        reverse=True
+                    )
+                    for rank_i, br in enumerate(excel_sorted, 1):
                         R = br["result"]
                         d = R.get("dimensions",{})
+                        p = R.get("profile",{})
+                        sn = R.get("sns_analysis",{})
+                        ov = compute_overall_score(R)[0]
                         ws.append([
+                            rank_i,
                             br["name"], br["dept"],
+                            ov if ov is not None else "",
                             R.get("rebalancing_verdict",{}).get("decision",""),
                             R.get("rebalancing_verdict",{}).get("confidence",""),
                             R.get("org_fit",{}).get("score",""),
+                            R.get("direction_fit",{}).get("score",""),
                             R.get("leadership_readiness",{}).get("score",""),
                             d.get("cognitive_ability",{}).get("score",""),
                             d.get("job_expertise",{}).get("score",""),
@@ -1974,13 +2345,18 @@ with tab_bulk:
                             d.get("leadership",{}).get("score",""),
                             R.get("burnout_risk",{}).get("level",""),
                             R.get("turnover_risk",{}).get("level",""),
+                            sn.get("score","") if sn.get("available") else "",
+                            p.get("major",""),
+                            p.get("university",""),
+                            p.get("education_level",""),
+                            p.get("region",""),
                             R.get("credential_performance",{}).get("alignment",""),
                             R.get("career_track",{}).get("recommended_track",""),
                             R.get("candidate_summary",""),
                             R.get("rebalancing_verdict",{}).get("rationale",""),
                         ])
                     # 열 너비
-                    widths = [10,18,14,8,10,12,8,8,8,8,8,8,12,16,40,50]
+                    widths = [6,10,16,8,12,7,8,9,9,8,8,8,8,8,8,8,12,12,9,10,11,14,36,46]
                     for i, w in enumerate(widths, 1):
                         ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
 
@@ -2001,7 +2377,7 @@ with tab_bulk:
             # 개별 상세 결과
             st.markdown("""
             <div class="section-header">
-                <span class="section-num">05</span>
+                <span class="section-num">08</span>
                 <span class="section-title">개별 상세 결과</span>
                 <div class="section-rule"></div>
             </div>
@@ -2121,6 +2497,8 @@ with tab_org:
                                 "turnover": R.get("turnover_risk", {}).get("level", "-"),
                                 "tags": R.get("personality_tags", [])[:5],
                                 "insight": R.get("overall_insight", ""),
+                                "overall": compute_overall_score(R)[0] if compute_overall_score(R)[0] is not None else "-",
+                                "direction": R.get("direction_fit", {}).get("score", "-"),
                             }
                         else:
                             person_data[nm] = {"has": False}
@@ -2309,9 +2687,14 @@ with tab_org:
                   +'<div style="font-size:1.05rem;font-weight:800;color:'+vs[0]+';">'+vs[2]+'</div></div>'
                   +'<div style="text-align:right;"><div style="font-size:0.6rem;color:#7A7268;">신뢰도</div>'
                   +'<div style="font-weight:700;color:'+vs[0]+';">'+d.confidence+'</div></div></div>'
+                  +'<div style="background:#FFFFFF;border:2px solid #2B3D5C;border-radius:10px;padding:0.7rem 1.1rem;margin-bottom:1.2rem;display:flex;align-items:center;justify-content:space-between;">'
+                  +'<div style="font-size:0.6rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#2B3D5C;">종합 점수</div>'
+                  +'<div style="font-size:1.7rem;font-weight:800;color:#2B3D5C;">'+d.overall+'<span style="font-size:0.7rem;color:#B0A898;font-weight:400;">/100</span></div>'
+                  +'</div>'
                   +'<div class="m-grid">'
                   +'<div class="m-metric"><div class="lbl">조직 적합도</div><div class="vl" style="color:'+(d.org_fit>=70?'#2D6A4F':d.org_fit>=50?'#8B6914':'#8B2635')+';">'+d.org_fit+'<span style="font-size:0.7rem;color:#B0A898;">/100</span></div></div>'
                   +'<div class="m-metric"><div class="lbl">리더십 준비도</div><div class="vl" style="color:'+(d.leadership>=80?'#2D6A4F':d.leadership>=60?'#2B3D5C':'#8B2635')+';">'+d.leadership+'<span style="font-size:0.7rem;color:#B0A898;">/100</span></div></div>'
+                  +'<div class="m-metric"><div class="lbl">방향성 적합도</div><div class="vl" style="color:'+(d.direction>=70?'#2D6A4F':d.direction>=50?'#8B6914':'#8B2635')+';">'+d.direction+'<span style="font-size:0.7rem;color:#B0A898;">/100</span></div></div>'
                   +'</div>'
                   +'<div class="m-row">'
                   +'<div class="m-chip"><div class="lbl">인지</div><div class="vl">'+d.cog+'</div></div>'
