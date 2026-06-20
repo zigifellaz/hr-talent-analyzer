@@ -2073,48 +2073,91 @@ with tab_bulk:
                 out[bonbu] = units
         return out
 
-    # ── 대상자 추가 (조직 명부에서 여러 명 선택) ──
-    with st.expander("➕  조직 명부에서 대상자 추가 (여러 명 선택)", expanded=not st.session_state["bulk_done"]):
+    # ── 대상자 추가 (조직 명부에서 체크박스로 여러 명 선택) ──
+    with st.expander("➕  조직 명부에서 대상자 추가 (체크박스로 여러 명 선택)", expanded=not st.session_state["bulk_done"]):
         _existing = {e["name"] for e in st.session_state["bulk_list"]}
         if _org_b:
             _flatb = _flatten_b(_org_b)
             bc1, bc2 = st.columns([1, 1.6])
             with bc1:
-                bb = st.selectbox("본부", list(_flatb.keys()), key="b_bonbu")
-            _bunits = _flatb.get(bb, {})
+                bb = st.selectbox("본부", ["전체"] + list(_flatb.keys()), key="b_bonbu")
             with bc2:
-                bu = st.selectbox("팀 · 파트", ["(본부 전체)"] + list(_bunits.keys()), key="b_unit")
-            if bu == "(본부 전체)":
-                _cands = [(p, u) for u, lst in _bunits.items() for p in lst]
+                if bb != "전체":
+                    _bunits = _flatb.get(bb, {})
+                    bu = st.selectbox("팀 · 파트", ["(본부 전체)"] + list(_bunits.keys()), key="b_unit")
+                else:
+                    bu = None
+                    st.markdown('<div style="font-size:0.8rem;color:#7A7268;padding-top:1.9rem;">전체 본부의 인원을 한 화면에서 선택</div>', unsafe_allow_html=True)
+            bsearch = st.text_input("이름 검색 (선택)", key="b_search", placeholder="이름 일부를 입력하면 목록이 좁혀집니다")
+
+            # 후보 인원 수집 (사람, 소속 라벨)
+            _cands = []
+            if bb == "전체":
+                for _bn, _us in _flatb.items():
+                    for _u, _lst in _us.items():
+                        for p in _lst:
+                            _cands.append((p, f"{_bn} / {_u}"))
             else:
-                _cands = [(p, bu) for p in _bunits.get(bu, [])]
-            _omap, _oo = {}, []
-            for p, u in _cands:
-                tag = "✅" if p["name"] in _done_b else "⚪"
-                inlist = " · 이미 목록" if p["name"] in _existing else ""
-                lab = f'{tag} {p["name"]} · {p.get("pos", "")}{inlist}'
-                _oo.append(lab)
-                _omap[lab] = (p, u)
-            picks = st.multiselect("인원 선택 (여러 명 가능 · ✅ 등록 / ⚪ 미등록)", _oo, key="b_multi")
-            if st.button("선택 인원 목록에 추가", use_container_width=True, key="b_add"):
+                _bunits = _flatb.get(bb, {})
+                if bu == "(본부 전체)":
+                    for _u, _lst in _bunits.items():
+                        for p in _lst:
+                            _cands.append((p, f"{bb} / {_u}"))
+                else:
+                    for p in _bunits.get(bu, []):
+                        _cands.append((p, f"{bb} / {bu}"))
+            if bsearch and bsearch.strip():
+                _cands = [(p, d) for (p, d) in _cands if bsearch.strip() in p["name"]]
+
+            _selectable = [(p, d) for (p, d) in _cands if p["name"] not in _existing]
+            st.markdown(
+                f'<div style="font-size:0.8rem;color:#7A7268;margin:0.5rem 0 0.4rem;">'
+                f'표시 <b style="color:#1A1714;">{len(_cands)}</b>명 · 추가 가능 <b style="color:#1A1714;">{len(_selectable)}</b>명 '
+                f'<span style="color:#B0A898;">(✅ 분석 등록 / ⚪ 미등록 · 이미 담은 사람은 비활성)</span></div>',
+                unsafe_allow_html=True)
+
+            sc1, sc2 = st.columns(2)
+            with sc1:
+                if st.button("표시된 인원 전체 선택", use_container_width=True, key="b_selall"):
+                    for p, d in _selectable:
+                        st.session_state[f"bchk_{p['name']}"] = True
+                    st.rerun()
+            with sc2:
+                if st.button("선택 모두 해제", use_container_width=True, key="b_clrall"):
+                    for p, d in _cands:
+                        st.session_state[f"bchk_{p['name']}"] = False
+                    st.rerun()
+
+            if _cands:
+                _ck_cols = st.columns(3)
+                for _idx, (p, d) in enumerate(_cands):
+                    _tag = "✅" if p["name"] in _done_b else "⚪"
+                    with _ck_cols[_idx % 3]:
+                        if p["name"] in _existing:
+                            st.checkbox(f"{_tag} {p['name']} · 담음", value=True, disabled=True, key=f"bchkD_{p['name']}")
+                        else:
+                            st.checkbox(f"{_tag} {p['name']} · {p.get('pos','')}", key=f"bchk_{p['name']}")
+            else:
+                st.caption("조건에 맞는 인원이 없습니다.")
+
+            if st.button("✓ 선택한 인원 목록에 추가", use_container_width=True, key="b_add"):
                 added = 0
                 cur = {e["name"] for e in st.session_state["bulk_list"]}
-                for lab in picks:
-                    p, u = _omap[lab]
+                _dmap = {p["name"]: d for p, d in _cands}
+                for p, d in _selectable:
                     if p["name"] in cur:
                         continue
-                    st.session_state["bulk_list"].append({
-                        "name": p["name"],
-                        "dept": (f"{bb} / {u}" if u != "(본부 전체)" else bb),
-                        "file_data": {}, "file_count": 0
-                    })
-                    cur.add(p["name"])
-                    added += 1
+                    if st.session_state.get(f"bchk_{p['name']}"):
+                        st.session_state["bulk_list"].append({
+                            "name": p["name"], "dept": _dmap.get(p["name"], ""),
+                            "file_data": {}, "file_count": 0})
+                        cur.add(p["name"])
+                        added += 1
                 if added:
                     st.success(f"✅ {added}명 목록에 추가됨")
                     st.rerun()
                 else:
-                    st.warning("새로 추가할 인원을 선택해주세요(이미 목록에 있는 인원은 제외됩니다).")
+                    st.warning("체크된 새 인원이 없습니다.")
         else:
             st.info("org_data.json이 없어 명부 선택을 사용할 수 없어요. 아래 직접 입력을 이용하세요.")
 
