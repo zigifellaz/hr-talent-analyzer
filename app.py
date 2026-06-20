@@ -2732,6 +2732,7 @@ with tab_bulk:
 
         if "auto_results" not in st.session_state: st.session_state["auto_results"] = []
         if "auto_done"    not in st.session_state: st.session_state["auto_done"]    = False
+        if "auto_excluded" not in st.session_state: st.session_state["auto_excluded"] = set()
 
         _orgA = load_org_data()
         _doneA = {r.get("candidate_name", "") for r in load_archive() if r.get("candidate_name")}
@@ -2771,19 +2772,22 @@ with tab_bulk:
             accept_multiple_files=True, key="auto_uploader")
 
         if auto_files and not st.session_state["auto_done"]:
-            grouped, unmatched = {}, []
+            grouped, unmatched, excluded = {}, [], {}
             for f in auto_files:
                 nm = _match_name(f.name)
-                if nm:
-                    grouped.setdefault(nm, []).append(f)
-                else:
+                if not nm:
                     unmatched.append(f)
+                elif nm in st.session_state["auto_excluded"]:
+                    excluded.setdefault(nm, []).append(f)
+                else:
+                    grouped.setdefault(nm, []).append(f)
             names_sorted = sorted(grouped.keys())
 
             st.markdown(
                 f'<div style="display:flex;gap:1.2rem;flex-wrap:wrap;margin:0.6rem 0 0.8rem;font-size:0.82rem;color:#7A7268;">'
                 f'<span>업로드 파일 <b style="color:#1A1714;">{len(auto_files)}</b>개</span>'
                 f'<span>인식된 대상자 <b style="color:#2D6A4F;">{len(names_sorted)}</b>명</span>'
+                f'<span>제외됨 <b style="color:#8B6914;">{len(excluded)}</b>건</span>'
                 f'<span>인식 실패 <b style="color:#B0392B;">{len(unmatched)}</b>개</span></div>',
                 unsafe_allow_html=True)
 
@@ -2793,6 +2797,9 @@ with tab_bulk:
                 <span class="section-title">자동 등록된 대상자 · 자료 확인</span>
                 <div class="section-rule"></div>
             </div>
+            <p style="font-size:0.74rem;color:#7A7268;margin-bottom:0.6rem;">
+                사람이 아닌 항목(예: ‘보고서’, 회사명 등)이 잘못 인식된 경우 오른쪽 <b>제외</b> 버튼으로 분석 대상에서 빼주세요.
+            </p>
             """, unsafe_allow_html=True)
 
             for nm in names_sorted:
@@ -2801,16 +2808,35 @@ with tab_bulk:
                 dept = _deptA.get(nm, "(명부 외)")
                 fnames = " · ".join(f.name for f in fs)
                 _cov_a = coverage_from_filenames([f.name for f in fs])
-                st.markdown(
-                    f'<div style="background:white;border:1px solid #D4CEC4;border-radius:6px;'
-                    f'padding:0.6rem 1rem;border-left:3px solid #B8924A;margin-bottom:0.45rem;">'
-                    f'<span style="font-size:0.95rem;">{tag}</span> '
-                    f'<b style="font-size:0.92rem;color:#1A1714;">{nm}</b> '
-                    f'<span style="font-size:0.74rem;color:#7A7268;">· {dept}</span> '
-                    f'<span style="font-size:0.74rem;color:#2D6A4F;font-weight:700;">· {len(fs)}개 자료</span>'
-                    f'<div style="font-size:0.72rem;color:#B0A898;margin-top:0.25rem;">📎 {fnames}</div>'
-                    f'{material_chips_inline(_cov_a)}</div>',
-                    unsafe_allow_html=True)
+                _suspect = dept == "(명부 외)"
+                cc1, cc2 = st.columns([6, 1])
+                with cc1:
+                    st.markdown(
+                        f'<div style="background:white;border:1px solid {"#E4C98A" if _suspect else "#D4CEC4"};border-radius:6px;'
+                        f'padding:0.6rem 1rem;border-left:3px solid {"#C9A227" if _suspect else "#B8924A"};margin-bottom:0.1rem;">'
+                        f'<span style="font-size:0.95rem;">{tag}</span> '
+                        f'<b style="font-size:0.92rem;color:#1A1714;">{nm}</b> '
+                        f'<span style="font-size:0.74rem;color:#7A7268;">· {dept}</span> '
+                        f'<span style="font-size:0.74rem;color:#2D6A4F;font-weight:700;">· {len(fs)}개 자료</span>'
+                        f'{" <span style=\'font-size:0.7rem;color:#8B6914;\'>· ⚠️ 명부 외 — 확인 필요</span>" if _suspect else ""}'
+                        f'<div style="font-size:0.72rem;color:#B0A898;margin-top:0.25rem;">📎 {fnames}</div>'
+                        f'{material_chips_inline(_cov_a)}</div>',
+                        unsafe_allow_html=True)
+                with cc2:
+                    if st.button("✕ 제외", key=f"auto_del_{nm}", use_container_width=True):
+                        st.session_state["auto_excluded"].add(nm)
+                        st.rerun()
+
+            if excluded:
+                with st.expander(f"🚫 제외된 항목 {len(excluded)}건 (분석 대상에서 빠짐 · 복원 가능)", expanded=False):
+                    for nm in sorted(excluded.keys()):
+                        ec1, ec2 = st.columns([6, 1])
+                        with ec1:
+                            st.markdown(f'<div style="font-size:0.8rem;color:#7A7268;padding-top:0.4rem;">🚫 <b>{nm}</b> · {len(excluded[nm])}개 자료</div>', unsafe_allow_html=True)
+                        with ec2:
+                            if st.button("복원", key=f"auto_restore_{nm}", use_container_width=True):
+                                st.session_state["auto_excluded"].discard(nm)
+                                st.rerun()
 
             if unmatched:
                 with st.expander(f"⚠️ 이름 인식 실패 {len(unmatched)}개 (분석 제외됨)"):
@@ -2906,6 +2932,7 @@ with tab_bulk:
             if st.button("🔄  초기화 (새 자동 분석 시작)", use_container_width=True, key="auto_reset"):
                 st.session_state["auto_results"] = []
                 st.session_state["auto_done"] = False
+                st.session_state["auto_excluded"] = set()
                 st.rerun()
 
 
