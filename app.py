@@ -3183,10 +3183,16 @@ with tab_results:
 
         st.markdown('<div class="hr"></div>', unsafe_allow_html=True)
         st.markdown('<div style="font-size:0.72rem;font-weight:700;letter-spacing:1px;color:#B8924A;text-transform:uppercase;margin:0.6rem 0;">개별 상세 결과</div>', unsafe_allow_html=True)
-        for d in filt:
+        for _i, d in enumerate(filt):
             ovs = d["ov"] if d["ov"] >= 0 else "-"
+            _anc = f"res_anchor_{_i}"
+            st.markdown(f'<div id="{_anc}" style="scroll-margin-top:70px;"></div>', unsafe_allow_html=True)
             with st.expander(f"{d['name']} · {d['dept']} · 종합 {ovs}"):
                 render_result(d["R"], d["name"])
+                st.markdown(
+                    f'<div style="text-align:right;margin-top:0.6rem;">'
+                    f'<a href="#{_anc}" style="font-size:0.78rem;color:#B8924A;text-decoration:none;font-weight:600;">↑ 맨 위로</a></div>',
+                    unsafe_allow_html=True)
 
         st.markdown('<div style="height:0.6rem;"></div>', unsafe_allow_html=True)
         st.download_button(
