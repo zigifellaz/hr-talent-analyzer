@@ -1086,7 +1086,7 @@ def load_archive() -> list:
     if url and key:
         try:
             r = req.get(
-                f"{url}/rest/v1/{SUPABASE_TABLE}?order=created_at.desc&limit=1000",
+                f"{url}/rest/v1/{SUPABASE_TABLE}?order=created_at.desc,id.desc&limit=1000",
                 headers=_sb_headers(key), timeout=8
             )
             if r.status_code == 200:
@@ -1095,7 +1095,7 @@ def load_archive() -> list:
                     {
                         "id":             row.get("id"),
                         "saved_at":       row.get("saved_at", ""),
-                        "candidate_name": row.get("candidate_name", ""),
+                        "candidate_name": (row.get("candidate_name", "") or "").strip(),
                         "dept":           row.get("dept", ""),
                         "result":         json.loads(row.get("result_json", "{}"))
                     }
@@ -1114,13 +1114,15 @@ def load_archive() -> list:
     return []
 
 def save_to_archive(record: dict):
-    """Supabase → 로컬 파일 순으로 저장"""
+    """Supabase → 로컬 파일 순으로 저장 (같은 이름은 최신 1건만 유지 = 재분석 시 자동 갱신)"""
     import requests as req
+    from urllib.parse import quote
     url, key = _get_supabase()
     if url and key:
+        nm = (record.get("candidate_name", "") or "").strip()
         payload = {
             "saved_at":       record.get("saved_at", ""),
-            "candidate_name": record.get("candidate_name", ""),
+            "candidate_name": nm,
             "dept":           record.get("dept", ""),
             "result_json":    json.dumps(record.get("result", {}), ensure_ascii=False)
         }
@@ -1132,12 +1134,29 @@ def save_to_archive(record: dict):
                     json=payload, timeout=20
                 )
                 if r.status_code in (200, 201):
+                    # 방금 저장한 row의 id 확인 후, 같은 이름의 '이전' 기록 삭제 → 최신만 유지
+                    new_id = None
+                    try:
+                        body = r.json()
+                        if isinstance(body, list) and body:
+                            new_id = body[0].get("id")
+                    except Exception:
+                        pass
+                    if nm and new_id is not None:
+                        try:
+                            del_url = (f"{url}/rest/v1/{SUPABASE_TABLE}"
+                                       f"?candidate_name=eq.{quote(nm)}&id=neq.{new_id}")
+                            req.delete(del_url, headers=_sb_headers(key), timeout=10)
+                        except Exception:
+                            pass  # 이전 기록 삭제 실패해도 최신은 정렬상 우선 표시됨
                     return  # Supabase 저장 성공
             except Exception:
                 pass
 
-    # 로컬 폴백
+    # 로컬 폴백 (같은 이름 이전 기록 제거 후 최신 추가)
     archive = load_archive()
+    _nm = (record.get("candidate_name", "") or "").strip()
+    archive = [a for a in archive if (a.get("candidate_name", "") or "").strip() != _nm]
     archive.insert(0, record)
     with open(ARCHIVE_FILE, "w", encoding="utf-8") as f:
         json.dump(archive, f, ensure_ascii=False, indent=2)
@@ -1186,15 +1205,19 @@ def get_person_status(name: str, archive_by_name: dict) -> tuple:
         return ("none", "#C0BCB4", None)
 
     R = rec.get("result", {})
+    # 분석 자료가 없거나 점수 산출이 안 되는(빈) 결과 → 회색(미등록)으로 처리
+    if not R or compute_overall_score(R)[0] is None:
+        return ("none", "#C0BCB4", None)
+
     b_lvl = R.get("burnout_risk", {}).get("level", "LOW")
     t_lvl = R.get("turnover_risk", {}).get("level", "LOW")
     verdict = R.get("rebalancing_verdict", {}).get("decision", "")
 
-    # 긴급(빨강): CRITICAL 위험 또는 MISFIT 판정
-    if b_lvl == "CRITICAL" or t_lvl == "CRITICAL" or verdict == "MISFIT":
+    # 빨강(집중관리): HIGH 이상 위험(HIGH·CRITICAL) 또는 MISFIT — 분석결과 표/모달과 동일 기준
+    if b_lvl in ("HIGH", "CRITICAL") or t_lvl in ("HIGH", "CRITICAL") or verdict == "MISFIT":
         return ("red", "#C0392B", R)
-    # 주의(노랑): HIGH/MEDIUM 위험 또는 WATCH 판정
-    if b_lvl in ("HIGH", "MEDIUM") or t_lvl in ("HIGH", "MEDIUM") or verdict == "WATCH":
+    # 노랑(주의): MEDIUM 위험 또는 WATCH
+    if b_lvl == "MEDIUM" or t_lvl == "MEDIUM" or verdict == "WATCH":
         return ("yellow", "#E0A800", R)
     # 정상(초록)
     return ("green", "#2D6A4F", R)
@@ -3055,6 +3078,16 @@ with tab_results:
             _latest[_nm] = _r
     recs = list(_latest.values())
 
+    # 조직도(org_data) 명부 이름 집합 — 조직도와의 연동 확인용
+    _org_r = load_org_data()
+    _roster_names = set()
+    if _org_r:
+        for _div in _org_r.values():
+            for _team in _div.values():
+                for _ppl in _team.values():
+                    for _p in _ppl:
+                        _roster_names.add((_p.get("name") or "").strip())
+
     if not recs:
         st.info("아직 저장된 분석 결과가 없습니다. 개인/대량 분석에서 먼저 분석을 진행하세요.")
     else:
@@ -3065,9 +3098,12 @@ with tab_results:
         for r in recs:
             R = r.get("result", {})
             ov = compute_overall_score(R)[0]
-            rows_data.append({"name": r.get("candidate_name", ""), "dept": r.get("dept", ""),
-                              "R": R, "ov": ov if ov is not None else -1})
+            _nm = r.get("candidate_name", "")
+            rows_data.append({"name": _nm, "dept": r.get("dept", ""),
+                              "R": R, "ov": ov if ov is not None else -1,
+                              "in_org": _nm in _roster_names})
         total = len(rows_data)
+        _not_in_org = [d for d in rows_data if not d["in_org"]]
         valid_ov = [d["ov"] for d in rows_data if d["ov"] >= 0]
         avg_ov = round(sum(valid_ov) / len(valid_ov), 1) if valid_ov else "-"
 
@@ -3099,6 +3135,24 @@ with tab_results:
             + _metric("⚠️ MISFIT", verd_count["MISFIT"], "#8B2635")
             + _metric("즉시 리더 가능", lead_imm, "#2B3D5C")
             + '</div>', unsafe_allow_html=True)
+
+        # 조직도 연동 상태
+        if _org_r:
+            _in_org_n = total - len(_not_in_org)
+            if _not_in_org:
+                _names_txt = ", ".join(d["name"] for d in _not_in_org)
+                st.markdown(
+                    f'<div style="background:#FBF3E0;border:1px solid #E4D3A8;border-radius:8px;padding:0.7rem 1rem;margin-bottom:1rem;font-size:0.8rem;color:#6B5A1E;">'
+                    f'🔗 조직도 연동: 분석된 <b>{total}</b>명 중 <b>{_in_org_n}</b>명은 조직도에 표시됩니다. '
+                    f'<b>{len(_not_in_org)}</b>명은 <b>조직 명부(org_data)에 없는 이름</b>이라 조직도에는 카드가 없어요 → '
+                    f'<span style="color:#8B2635;">{_names_txt}</span><br>'
+                    f'<span style="font-size:0.74rem;color:#8A7A4E;">※ 이름 철자가 명부와 다르거나(예: 공백·오타), 자동 인식이 사람이 아닌 항목을 잡았거나, 명부에 없는 인원일 수 있어요. 이름을 맞춰 재분석하거나 org_data에 추가하면 조직도와 완전히 연동됩니다.</span></div>',
+                    unsafe_allow_html=True)
+            else:
+                st.markdown(
+                    f'<div style="background:#E6F2EA;border:1px solid #9CCBB0;border-radius:8px;padding:0.6rem 1rem;margin-bottom:1rem;font-size:0.8rem;color:#1E5C3A;">'
+                    f'🔗 조직도 연동: 분석된 <b>{total}</b>명 전원이 조직 명부와 매칭되어 조직도에 표시됩니다.</div>',
+                    unsafe_allow_html=True)
 
         st.markdown('<div style="font-size:0.72rem;font-weight:700;letter-spacing:1px;color:#B8924A;text-transform:uppercase;margin:0.6rem 0 0.4rem;">판정 분포</div>', unsafe_allow_html=True)
         _vc = {"KEEP": "#2D6A4F", "DEVELOP": "#2B3D5C", "WATCH": "#8B6914", "MISFIT": "#8B2635"}
@@ -3167,7 +3221,8 @@ with tab_results:
             of = R.get("org_fit", {}).get("score", "?")
             lr = R.get("leadership_readiness", {}).get("score", "?")
             ovs = d["ov"] if d["ov"] >= 0 else "-"
-            _tr.append(f"| {_md} | **{ovs}** | **{d['name']}** | {d['dept']} | {_vee(vd,'⚪')} {vd} | {of} | {lr} | {' | '.join(sc)} | {_ree(bl,'⚪')} | {_ree(tl,'⚪')} |")
+            _orgmark = "" if d["in_org"] else " ⚠️명부외"
+            _tr.append(f"| {_md} | **{ovs}** | **{d['name']}**{_orgmark} | {d['dept']} | {_vee(vd,'⚪')} {vd} | {of} | {lr} | {' | '.join(sc)} | {_ree(bl,'⚪')} | {_ree(tl,'⚪')} |")
         st.markdown("\n".join(_tr))
 
         st.markdown('<div style="font-size:0.72rem;font-weight:700;letter-spacing:1px;color:#B8924A;text-transform:uppercase;margin:1.2rem 0 0.4rem;">본부별 평균 종합점수</div>', unsafe_allow_html=True)
