@@ -2081,10 +2081,49 @@ with tab_bulk:
             bc1, bc2 = st.columns([1, 1.6])
             with bc1:
                 bb = st.selectbox("본부", ["전체"] + list(_flatb.keys()), key="b_bonbu")
+
+            # 팀·파트 선택지 구성 (팀 선택 시 하위 파트 인원까지 포함)
+            _optmembers = {}   # 라벨 -> [(person, dept)]
+            _opts = []
+            if bb != "전체":
+                _bunits = _flatb.get(bb, {})
+                _opts.append("(본부 전체)")
+                _optmembers["(본부 전체)"] = [(p, f"{bb} / {lbl}") for lbl, lst in _bunits.items() for p in lst]
+                if "(본부 직속)" in _bunits:
+                    _opts.append("(본부 직속)")
+                    _optmembers["(본부 직속)"] = [(p, f"{bb} / (본부 직속)") for p in _bunits["(본부 직속)"]]
+                _teams, _seen = [], set()
+                for lbl in _bunits:
+                    if lbl == "(본부 직속)":
+                        continue
+                    t = lbl.split(" · ", 1)[0] if " · " in lbl else lbl
+                    if t not in _seen:
+                        _seen.add(t)
+                        _teams.append(t)
+                for t in _teams:
+                    _direct = _bunits.get(t, [])
+                    _plabels = [lbl for lbl in _bunits if lbl.startswith(t + " · ")]
+                    _team_all = [(p, f"{bb} / {t}") for p in _direct]
+                    for pl in _plabels:
+                        _team_all += [(p, f"{bb} / {pl}") for p in _bunits[pl]]
+                    if _plabels:
+                        _tl = f"{t} (팀 전체 · 하위 파트 포함)"
+                        _opts.append(_tl)
+                        _optmembers[_tl] = _team_all
+                        if _direct:
+                            _dl = f"{t} · (팀 직속)"
+                            _opts.append(_dl)
+                            _optmembers[_dl] = [(p, f"{bb} / {t}") for p in _direct]
+                        for pl in _plabels:
+                            _opts.append(pl)
+                            _optmembers[pl] = [(p, f"{bb} / {pl}") for p in _bunits[pl]]
+                    else:
+                        _opts.append(t)
+                        _optmembers[t] = _team_all
+
             with bc2:
                 if bb != "전체":
-                    _bunits = _flatb.get(bb, {})
-                    bu = st.selectbox("팀 · 파트", ["(본부 전체)"] + list(_bunits.keys()), key="b_unit")
+                    bu = st.selectbox("팀 · 파트", _opts, key="b_unit")
                 else:
                     bu = None
                     st.markdown('<div style="font-size:0.8rem;color:#7A7268;padding-top:1.9rem;">전체 본부의 인원을 한 화면에서 선택</div>', unsafe_allow_html=True)
@@ -2098,14 +2137,7 @@ with tab_bulk:
                         for p in _lst:
                             _cands.append((p, f"{_bn} / {_u}"))
             else:
-                _bunits = _flatb.get(bb, {})
-                if bu == "(본부 전체)":
-                    for _u, _lst in _bunits.items():
-                        for p in _lst:
-                            _cands.append((p, f"{bb} / {_u}"))
-                else:
-                    for p in _bunits.get(bu, []):
-                        _cands.append((p, f"{bb} / {bu}"))
+                _cands = list(_optmembers.get(bu, []))
             if bsearch and bsearch.strip():
                 _cands = [(p, d) for (p, d) in _cands if bsearch.strip() in p["name"]]
 
