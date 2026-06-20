@@ -1784,7 +1784,7 @@ company_direction = """※ 회사의 향후 전략 방향을 여기에 입력하
 - 성과 중심·협업 중심의 조직문화 정착"""
 
 # ── 탭 ──
-tab_single, tab_bulk, tab_org = st.tabs(["👤  개인 분석", "👥  대량 분석", "🏢  조직도"])
+tab_single, tab_bulk, tab_org, tab_reanalyze = st.tabs(["👤  개인 분석", "👥  대량 분석", "🏢  조직도", "🔬  재검사"])
 
 
 # ════════════════════════════════════════════════════════
@@ -2467,7 +2467,7 @@ with tab_org:
         # ── 인터랙티브 조직도 (줌/팬 + 인앱 모달) ──
         st.markdown("""
         <p style="font-size:0.78rem;color:#7A7268;margin-bottom:0.5rem;">
-        💡 <b>Ctrl + 마우스 휠</b> 마우스 위치 기준 확대/축소 &nbsp;·&nbsp; <b>드래그</b> 이동 &nbsp;·&nbsp; <b>인원 카드 클릭</b> 시 분석 결과 즉시 표시 (새로고침 없음)
+        💡 <b>Ctrl + 휠</b> 마우스 위치 기준 확대/축소 &nbsp;·&nbsp; <b>Shift + 휠</b> 좌우 이동 &nbsp;·&nbsp; <b>드래그</b> 이동 &nbsp;·&nbsp; <b>인원 카드 클릭</b> 시 분석 결과 즉시 표시 (새로고침 없음)
         </p>
         """, unsafe_allow_html=True)
 
@@ -2551,8 +2551,9 @@ with tab_org:
 
         def _hcard(kind, name, count, accent):
             return (f'<div class="hcard {kind}" style="--accent:{accent};">'
-                    f'<span class="hkind">{kind}</span><span class="hname">{name}</span>'
-                    f'<span class="hcount">{count}명</span></div>')
+                    f'<div class="hname">{name}</div>'
+                    f'<div class="hmeta"><span class="hkind">{kind}</span><span class="hcount">{count}명</span></div>'
+                    f'</div>')
 
         def _part_li(pname, plist, accent):
             node = _hcard("파트", pname, _cnt(plist), accent) + _people_grid(plist, accent)
@@ -2583,9 +2584,10 @@ with tab_org:
         _total = _cnt(org_data)
         _cs, _cc, _clabel, _clight = _light_span(_ceo_name)
         ceo_card = (f'<div class="hcard ceo" style="--accent:#2B2F36;" onclick="showModal(\'{_ceo_name}\')" '
-                    f'title="{_ceo_name} · {_clabel}"><span class="hkind">대표이사</span>'
-                    f'<span class="hname">{_ceo_name}</span>{_clight}'
-                    f'<span class="hcount">전체 {_total}명</span></div>')
+                    f'title="{_ceo_name} · {_clabel}">'
+                    f'<div class="hname">{_ceo_name}{_clight}</div>'
+                    f'<div class="hmeta"><span class="hkind">대표이사</span><span class="hcount">{_total}명</span></div>'
+                    f'</div>')
         _bonbus = [b for b in org_data.keys() if b != "이사회"]
         org_html = ('<ul class="tree-root"><li><div class="node">' + ceo_card + '</div><ul>'
                     + "".join(_bonbu_li(b, org_data[b]) for b in _bonbus)
@@ -2616,31 +2618,35 @@ with tab_org:
         li:last-child::before { border-right:1.5px solid #C9C1B4; }
         li > ul::before { content:''; position:absolute; top:0; left:50%; border-left:1.5px solid #C9C1B4; height:26px; }
         .node { display:flex; flex-direction:column; align-items:center; }
-        /* 구조 헤더 카드 (본부/팀/파트) */
-        .hcard { display:flex; align-items:center; gap:8px; background:#FFFFFF; border:1px solid #E2DDD4;
-                 border-top:3px solid var(--accent); border-radius:10px; padding:8px 14px; white-space:nowrap;
-                 box-shadow:0 2px 6px rgba(0,0,0,0.05); }
-        .hcard .hkind { font-size:9px; letter-spacing:1.5px; text-transform:uppercase; color:var(--accent); font-weight:800; }
-        .hcard .hname { font-size:14px; font-weight:800; color:#1A1714; }
-        .hcard.본부 .hname { color:var(--accent); font-size:15px; }
-        .hcard.ceo { cursor:pointer; }
-        .hcard.ceo .hname { font-size:16px; }
-        .hcard .hcount { font-size:10px; color:#8A8278; background:#F7F3ED; border:1px solid #E2DDD4;
-                         border-radius:999px; padding:1px 9px; margin-left:2px; }
+        /* ── 모든 카드 동일 크기 (디자인 통일) ── */
+        .hcard, .pcard {
+            width:148px; box-sizing:border-box; background:#FFFFFF; border:1px solid #DDD7CC;
+            border-radius:8px; padding:8px 11px; cursor:pointer; text-align:left;
+            display:flex; flex-direction:column; justify-content:center; gap:3px; min-height:52px;
+            box-shadow:0 1px 3px rgba(0,0,0,0.05);
+            transition:transform .12s, box-shadow .12s, border-color .12s;
+        }
+        .hcard:hover, .pcard:hover { border-color:var(--accent); box-shadow:0 4px 12px rgba(0,0,0,0.13); transform:translateY(-2px); }
+        /* 구조 헤더 카드: 상단 accent 라인으로 구분 */
+        .hcard { border-top:3px solid var(--accent); }
+        .hcard .hname { font-size:12.5px; font-weight:800; color:#1A1714; line-height:1.25;
+                        display:flex; align-items:center; gap:6px; }
+        .hcard.본부 .hname { color:var(--accent); }
+        .hcard.ceo .hname { color:#2B2F36; }
+        .hcard .hmeta { display:flex; align-items:center; justify-content:space-between; gap:6px; }
+        .hcard .hkind { font-size:9px; letter-spacing:1px; text-transform:uppercase; color:var(--accent); font-weight:800; }
+        .hcard .hcount { font-size:9.5px; color:#8A8278; }
         .hcard .light { width:9px; height:9px; border-radius:50%; flex:0 0 auto; }
-        /* 인원 카드 그리드 */
-        .people { display:flex; flex-wrap:wrap; justify-content:center; gap:7px; max-width:344px; margin-top:13px; }
-        .pcard { position:relative; background:#FFFFFF; border:1px solid #DDD7CC; border-radius:8px;
-                 padding:7px 10px; min-width:98px; cursor:pointer;
-                 transition:transform .12s, box-shadow .12s, border-color .12s; }
-        .pcard:hover { border-color:var(--accent); box-shadow:0 4px 12px rgba(0,0,0,0.13); transform:translateY(-2px); }
+        /* 인원 카드: 부서장은 왼쪽 굵은 테두리로 구분 */
         .pcard.leader { border-left:4px solid var(--accent); background:#FCFBF8; }
         .pname { font-size:12.5px; font-weight:600; color:#1A1714; line-height:1.25; }
         .pcard.leader .pname { font-weight:800; }
-        .pmeta { display:flex; align-items:center; justify-content:space-between; gap:7px; margin-top:3px; }
+        .pmeta { display:flex; align-items:center; justify-content:space-between; gap:7px; }
         .ppos { font-size:10px; color:#9A938A; }
         .pcard.leader .ppos { color:var(--accent); font-weight:600; }
         .light { width:9px; height:9px; border-radius:50%; flex:0 0 auto; }
+        /* 인원 그리드 */
+        .people { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; max-width:336px; margin-top:13px; }
         #controls { position:absolute; bottom:16px; right:16px; display:flex; gap:7px; z-index:10; }
         #controls button { width:38px; height:38px; border:1px solid #D4CEC4; background:#FFFFFF;
                            border-radius:8px; font-size:18px; cursor:pointer; color:#3D3830;
@@ -2686,8 +2692,10 @@ with tab_org:
         .m-empty .ds { font-size:0.85rem; color:#7A7268; line-height:1.6; }
         .light { cursor:pointer; }
         .pcard:hover .light { transform:scale(1.45); transition:transform .12s; }
-        .m-cta { background:#FBF3E0; border:1px solid #E4D3A8; border-radius:8px;
-                 padding:0.8rem 1.1rem; font-size:0.8rem; color:#6B5A1E; line-height:1.6; margin-top:0.4rem; }
+        .m-gobtn { display:block; width:100%; margin-top:0.4rem; padding:0.85rem 1.1rem;
+                   background:#1A1714; color:#F7F3ED; border:none; border-radius:8px;
+                   font-size:0.85rem; font-weight:700; cursor:pointer; }
+        .m-gobtn:hover { background:#2B3D5C; }
         </style></head><body>
         <div id="viewport">
             <div id="canvas">__ORG_HTML__</div>
@@ -2717,6 +2725,8 @@ with tab_org:
                 const mx=e.clientX-r.left, my=e.clientY-r.top, before=scale;
                 scale=Math.min(2.5,Math.max(0.25,scale - e.deltaY*0.0015));
                 tx=mx-(mx-tx)*(scale/before); ty=my-(my-ty)*(scale/before); apply();
+            } else if(e.shiftKey){ e.preventDefault();
+                tx -= (e.deltaY || e.deltaX); apply();
             }
         },{passive:false});
         vp.addEventListener('mousedown',function(e){
@@ -2739,9 +2749,10 @@ with tab_org:
                 m.innerHTML='<div class="m-head"><button class="m-close" onclick="closeModal()">✕</button>'
                   +'<div class="m-name">'+name+'</div></div>'
                   +'<div class="m-body"><div class="m-empty"><div class="ic">📭</div>'
-                  +'<div class="ttl">분석 결과가 없습니다</div>'
-                  +'<div class="ds">'+name+' 님의 분석 데이터가 아직 없습니다.<br>'
-                  +'아래 <b>‘인원 상세 · 자료 추가 &amp; 재검사’</b> 패널에서 '+name+' 을(를) 선택해<br>자료를 올리면 첫 분석을 진행할 수 있어요.</div></div></div>';
+                  +'<div class="ttl">분석 결과가 없습니다 · 자료 미등록</div>'
+                  +'<div class="ds">'+name+' 님은 아직 분석 데이터가 없습니다.<br>재검사 탭에서 자료를 올려 분석을 진행하세요.</div>'
+                  +'<button class="m-gobtn" onclick="goReanalyze()" style="max-width:300px;margin:1.1rem auto 0;">🔬 재검사 탭으로 이동 →</button>'
+                  +'</div></div>';
             } else {
                 const vs=V_STYLE[d.verdict]||["#7A7268","#EDE8E0",d.verdict];
                 let tags=d.tags.map(t=>'<span class="m-tag">'+t+'</span>').join('');
@@ -2784,12 +2795,20 @@ with tab_org:
                   +'<div class="m-sec"><div class="h">프로필</div><div class="t">'
                     +(function(){var a=[['전공',d.major],['대학',d.univ],['학력',d.edu],['출신지역',d.region]].filter(x=>x[1]&&x[1]!='자료 미제공'&&x[1]!='-');return a.length?a.map(x=>'<b>'+x[0]+'</b> '+x[1]).join(' &nbsp;·&nbsp; '):'<span style="color:#B0A898;">프로필 자료 미확인</span>';})()
                     +'</div></div>'
-                  +'<div class="m-cta">📂 <b>자료 추가 · 재검사</b>는 조직도 아래 <b>‘인원 상세 · 자료 추가 &amp; 재검사’</b> 패널에서 <b>'+name+'</b> 을(를) 선택해 진행하세요.</div>'
+                  +'<button class="m-gobtn" onclick="goReanalyze()">🔬 재검사 탭에서 재분석하기 →</button>'
                   +'</div>';
             }
             document.getElementById('overlay').style.display='flex';
         }
         function closeModal(){ document.getElementById('overlay').style.display='none'; }
+        function goReanalyze(){
+            try{
+                var btns=window.parent.document.querySelectorAll('button[role="tab"]');
+                for(var i=0;i<btns.length;i++){ var t=btns[i].innerText||''; if(t.indexOf('재검사')>=0){ btns[i].click(); break; } }
+                window.parent.scrollTo({top:0,behavior:'smooth'});
+            }catch(e){}
+            closeModal();
+        }
         apply();
         </script>
         </body></html>
@@ -2797,88 +2816,96 @@ with tab_org:
         org_chart_html = org_chart_html.replace("__ORG_HTML__", org_html).replace("__PDATA__", pdata_json)
         components.html(org_chart_html, height=870, scrolling=False)
 
-        # ── 인원 상세 · 자료 추가 & 재검사 (서버 연동) ──
-        st.markdown("""
-        <div class="section-header" style="margin-top:1.5rem;">
-            <span class="section-num">🔬</span>
-            <span class="section-title">인원 상세 · 자료 추가 &amp; 재검사</span>
-            <div class="section-rule"></div>
-        </div>
-        <p style="font-size:0.78rem;color:#7A7268;margin-bottom:0.9rem;">
-            조직도에서 신호등(카드)을 눌러 확인한 직원을 아래에서 선택하면 <b>제출 서류 리스트·상세 분석 결과지</b>를 보고,
-            <b>자료를 추가해 그 자리에서 재검사</b>할 수 있어요. 재검사 결과는 조직도 신호등에 자동 반영됩니다.
-        </p>
-        """, unsafe_allow_html=True)
 
-        roster = []
-        for _div in org_data.values():
-            for _team in _div.values():
-                for _ppl in _team.values():
-                    for _p in _ppl:
-                        roster.append(_p["name"])
-        roster = sorted(set(roster))
 
-        sel = st.selectbox("직원 선택", ["— 선택 —"] + roster, key="org_detail_sel")
-        if sel and sel != "— 선택 —":
-            s_status, s_color, _ = get_person_status(sel, archive_by_name)
-            s_label = {"none": "자료 미등록", "green": "정상", "yellow": "번아웃 초기", "red": "집중관리 필요"}.get(s_status, "")
+# ════════════════════════════════════════════════════════
+#  TAB 4 — 재검사 (자료 추가 후 재분석)
+# ════════════════════════════════════════════════════════
+with tab_reanalyze:
+    st.markdown("""
+    <div class="section-header">
+        <span class="section-num">🔬</span>
+        <span class="section-title">재검사 · 자료 추가 후 재분석</span>
+        <div class="section-rule"></div>
+    </div>
+    <p style="font-size:0.8rem;color:#7A7268;margin-bottom:1rem;">
+        직원을 선택하면 <b>제출 서류 리스트 · 상세 분석 결과지</b>를 확인하고, 자료를 추가해 <b>그 자리에서 재검사</b>할 수 있어요.
+        결과는 조직도 신호등에 자동 반영됩니다. (조직도에서 카드를 클릭해 뜨는 창의 <b>‘재검사 탭으로 이동’</b> 버튼으로도 올 수 있어요.)
+    </p>
+    """, unsafe_allow_html=True)
+
+    _orgr = load_org_data()
+    _arch = load_archive()
+    _abn = {}
+    for _rec in _arch:
+        _nm = _rec.get("candidate_name", "")
+        if _nm and _nm not in _abn:
+            _abn[_nm] = _rec
+    if _orgr:
+        _roster = sorted({p["name"] for div in _orgr.values() for team in div.values()
+                          for ppl in team.values() for p in ppl})
+    else:
+        _roster = sorted(_abn.keys())
+
+    if not _roster:
+        st.info("조직 데이터가 없어요. org_data.json을 업로드하면 직원 목록이 나타납니다.")
+    else:
+        rsel = st.selectbox("직원 선택", ["— 선택 —"] + _roster, key="reanalyze_sel")
+        if rsel and rsel != "— 선택 —":
+            rs, rc, _ = get_person_status(rsel, _abn)
+            rlabel = {"none": "자료 미등록", "green": "정상", "yellow": "번아웃 초기", "red": "집중관리 필요"}.get(rs, "")
             st.markdown(
-                f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:0.6rem;">'
-                f'<span style="width:11px;height:11px;border-radius:50%;background:{s_color};box-shadow:0 0 5px {s_color};display:inline-block;"></span>'
-                f'<b style="font-size:1.05rem;color:#1A1714;">{sel}</b>'
-                f'<span style="font-size:0.78rem;color:#7A7268;">· {s_label}</span></div>',
-                unsafe_allow_html=True
-            )
+                f'<div style="display:flex;align-items:center;gap:8px;margin:0.3rem 0 0.8rem;">'
+                f'<span style="width:11px;height:11px;border-radius:50%;background:{rc};box-shadow:0 0 5px {rc};display:inline-block;"></span>'
+                f'<b style="font-size:1.05rem;color:#1A1714;">{rsel}</b>'
+                f'<span style="font-size:0.78rem;color:#7A7268;">· {rlabel}</span></div>',
+                unsafe_allow_html=True)
 
-            rec = archive_by_name.get(sel)
-            if rec and rec.get("result"):
-                R = rec["result"]
-                mats = R.get("data_coverage", {}).get("materials", [])
-                conf = R.get("data_coverage", {}).get("confidence", "")
-                mat_html = "".join(
+            rrec = _abn.get(rsel)
+            if rrec and rrec.get("result"):
+                RR = rrec["result"]
+                _mats = RR.get("data_coverage", {}).get("materials", [])
+                _conf = RR.get("data_coverage", {}).get("confidence", "")
+                _mh = "".join(
                     f'<span style="display:inline-block;background:#F2EEE6;border:1px solid #E2DDD4;border-radius:5px;padding:2px 9px;margin:2px;font-size:0.74rem;color:#3D3830;">{m}</span>'
-                    for m in mats
+                    for m in _mats
                 ) or '<span style="color:#B0A898;font-size:0.78rem;">기록된 제출 자료 없음 (이전 분석은 자료 목록을 저장하지 않았을 수 있어요)</span>'
-                st.markdown(f"""
-                <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;padding:1rem 1.3rem;margin-bottom:0.6rem;">
-                    <div style="font-size:0.7rem;font-weight:700;letter-spacing:1px;color:#B8924A;text-transform:uppercase;margin-bottom:0.5rem;">📄 제출 자료 · 서류 리스트{(' · 근거 신뢰도 ' + conf) if conf else ''}</div>
-                    <div>{mat_html}</div>
-                </div>
-                """, unsafe_allow_html=True)
+                st.markdown(
+                    f'<div style="background:white;border:1px solid #D4CEC4;border-radius:8px;padding:1rem 1.3rem;margin-bottom:0.6rem;">'
+                    f'<div style="font-size:0.7rem;font-weight:700;letter-spacing:1px;color:#B8924A;text-transform:uppercase;margin-bottom:0.5rem;">'
+                    f'📄 제출 자료 · 서류 리스트{(" · 근거 신뢰도 " + _conf) if _conf else ""}</div><div>{_mh}</div></div>',
+                    unsafe_allow_html=True)
                 with st.expander("📑 상세 분석 결과지 펼치기", expanded=False):
-                    render_result(R, sel)
+                    render_result(RR, rsel)
             else:
-                st.info(f"{sel} 님은 아직 분석 데이터가 없어요. 아래에서 자료를 올려 첫 분석을 진행할 수 있습니다.")
+                st.info(f"{rsel} 님은 아직 분석 데이터가 없어요. 자료를 올려 첫 분석을 진행하세요.")
 
-            with st.expander("➕ 자료 추가 후 재검사 (이 자리에서 바로 실행)",
-                             expanded=not (rec and rec.get("result"))):
-                add_files = st.file_uploader(
-                    "자료 업로드 (이력서·기안서·MBTI·인적성·SNS 등, 여러 개 가능)",
-                    type=["pdf", "docx", "jpg", "jpeg", "png", "webp", "txt", "md"],
-                    accept_multiple_files=True, key=f"reanalyze_up_{sel}"
-                )
-                st.caption("※ 업로드한 자료로 새로 분석하며, 기존 결과는 최신 결과로 갱신됩니다.")
-                if st.button("🔬 재검사 실행", use_container_width=True, key=f"reanalyze_btn_{sel}"):
-                    if not add_files:
-                        st.error("⚠️ 분석할 자료를 1개 이상 업로드해주세요.")
-                    else:
-                        with st.spinner(f"{sel} 재검사 중 — 업로드한 자료를 종합 검토하고 있습니다..."):
-                            try:
-                                fd = {uf.name: read_file_content(uf) for uf in add_files}
-                                fd["회사 인재상"] = company_standard
-                                fd["회사 5대 핵심문화 축"] = core_culture
-                                fd["회사 향후 방향성"] = company_direction
-                                Rnew = analyze_candidate(api_key, fd, sel, company_standard)
-                                save_to_archive({
-                                    "saved_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                                    "candidate_name": sel,
-                                    "dept": rec.get("dept", "") if rec else "",
-                                    "result": Rnew,
-                                })
-                                st.success(f"✅ {sel} 재검사 완료! 조직도 신호등과 결과지가 갱신됩니다.")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"재검사 오류: {str(e)[:160]}")
+            _files = st.file_uploader(
+                "자료 업로드 (이력서·기안서·MBTI·인적성·SNS 등, 여러 개 가능)",
+                type=["pdf", "docx", "jpg", "jpeg", "png", "webp", "txt", "md"],
+                accept_multiple_files=True, key=f"re_up_{rsel}")
+            st.caption("※ 업로드한 자료로 새로 분석하며, 기존 결과는 최신 결과로 갱신됩니다.")
+            if st.button("🔬 재검사 실행", use_container_width=True, key=f"re_btn_{rsel}"):
+                if not _files:
+                    st.error("⚠️ 분석할 자료를 1개 이상 업로드해주세요.")
+                else:
+                    with st.spinner(f"{rsel} 재검사 중 — 업로드한 자료를 종합 검토하고 있습니다..."):
+                        try:
+                            _fd = {uf.name: read_file_content(uf) for uf in _files}
+                            _fd["회사 인재상"] = company_standard
+                            _fd["회사 5대 핵심문화 축"] = core_culture
+                            _fd["회사 향후 방향성"] = company_direction
+                            _Rnew = analyze_candidate(api_key, _fd, rsel, company_standard)
+                            save_to_archive({
+                                "saved_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                "candidate_name": rsel,
+                                "dept": rrec.get("dept", "") if rrec else "",
+                                "result": _Rnew,
+                            })
+                            st.success(f"✅ {rsel} 재검사 완료! 조직도 신호등과 결과지가 갱신됩니다.")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"재검사 오류: {str(e)[:160]}")
 
 
 # ── Footer ──
