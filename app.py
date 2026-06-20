@@ -2416,11 +2416,12 @@ with tab_org:
     <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;
                 padding:0.9rem 1.3rem;margin-bottom:1.2rem;display:flex;
                 flex-wrap:wrap;gap:1.2rem;align-items:center;">
-        <span style="font-size:0.72rem;font-weight:700;color:#3D3830;letter-spacing:1px;">상태 범례</span>
+        <span style="font-size:0.72rem;font-weight:700;color:#3D3830;letter-spacing:1px;">상태 신호등</span>
         <span style="font-size:0.75rem;color:#7A7268;"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#2D6A4F;margin-right:4px;"></span>정상</span>
-        <span style="font-size:0.75rem;color:#7A7268;"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#E0A800;margin-right:4px;"></span>주의 (번아웃·이직 신호)</span>
-        <span style="font-size:0.75rem;color:#7A7268;"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#C0392B;margin-right:4px;"></span>긴급 조치 필요</span>
-        <span style="font-size:0.75rem;color:#7A7268;"><span style="display:inline-block;width:18px;height:11px;border-radius:3px;background:#E8E4DC;margin-right:4px;vertical-align:middle;"></span>분석 데이터 없음</span>
+        <span style="font-size:0.75rem;color:#7A7268;"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#E0A800;margin-right:4px;"></span>번아웃 초기</span>
+        <span style="font-size:0.75rem;color:#7A7268;"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#C0392B;margin-right:4px;"></span>집중관리 필요</span>
+        <span style="font-size:0.75rem;color:#7A7268;"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#C0BCB4;margin-right:4px;"></span>자료 미등록</span>
+        <span style="font-size:0.72rem;color:#B0A898;margin-left:0.4rem;">| 카드 왼쪽 굵은 테두리 = 부서장</span>
     </div>
     """, unsafe_allow_html=True)
 
@@ -2466,7 +2467,7 @@ with tab_org:
         # ── 인터랙티브 조직도 (줌/팬 + 인앱 모달) ──
         st.markdown("""
         <p style="font-size:0.78rem;color:#7A7268;margin-bottom:0.5rem;">
-        💡 <b>Ctrl + 마우스 휠</b> 확대/축소 &nbsp;·&nbsp; <b>드래그</b> 이동 &nbsp;·&nbsp; <b>인원 카드 클릭</b> 시 분석 결과 즉시 표시 (새로고침 없음)
+        💡 <b>Ctrl + 마우스 휠</b> 마우스 위치 기준 확대/축소 &nbsp;·&nbsp; <b>드래그</b> 이동 &nbsp;·&nbsp; <b>인원 카드 클릭</b> 시 분석 결과 즉시 표시 (새로고침 없음)
         </p>
         """, unsafe_allow_html=True)
 
@@ -2499,55 +2500,96 @@ with tab_org:
                                 "insight": R.get("overall_insight", ""),
                                 "overall": compute_overall_score(R)[0] if compute_overall_score(R)[0] is not None else "-",
                                 "direction": R.get("direction_fit", {}).get("score", "-"),
+                                "materials": R.get("data_coverage", {}).get("materials", []),
+                                "cov_conf": R.get("data_coverage", {}).get("confidence", ""),
+                                "cov_note": R.get("data_coverage", {}).get("note", ""),
+                                "major": R.get("profile", {}).get("major", ""),
+                                "univ": R.get("profile", {}).get("university", ""),
+                                "edu": R.get("profile", {}).get("education_level", ""),
+                                "region": R.get("profile", {}).get("region", ""),
                             }
                         else:
                             person_data[nm] = {"has": False}
 
-        # 본부 컬럼 HTML
-        div_blocks = []
-        for div_name, teams in org_data.items():
-            team_blocks = []
-            for team_name, parts in teams.items():
-                team_label = "" if team_name == "_직속" else team_name
-                part_blocks = []
-                for part_name, people in parts.items():
-                    part_label = "" if part_name == "_직속" else part_name
-                    cards = []
-                    for person in people:
-                        pname = person["name"]
-                        s, c, _ = get_person_status(pname, archive_by_name)
-                        is_none = (s == "none")
-                        card_bg = "#ECE8E0" if is_none else "#FFFFFF"
-                        card_border = "#D8D2C8" if is_none else "#D4CEC4"
-                        name_color = "#9A9286" if is_none else "#1A1714"
-                        dot = "" if is_none else f'<span class="dot" style="background:{c};box-shadow:0 0 5px {c};"></span>'
-                        role = person.get("role", "")
-                        role_txt = f" · {role}" if role and role != "팀원" else ""
-                        cards.append(
-                            f'<div class="pcard" style="background:{card_bg};border-color:{card_border};" '
-                            f'onclick="showModal(\'{pname}\')">'
-                            f'<div class="pname" style="color:{name_color};">{pname}{dot}</div>'
-                            f'<div class="ppos">{person["pos"]}{role_txt}</div>'
-                            f'</div>'
-                        )
-                    part_html = ""
-                    if part_label:
-                        part_html += f'<div class="partlabel">└ {part_label}</div>'
-                    part_html += f'<div class="cards">{"".join(cards)}</div>'
-                    part_blocks.append(f'<div class="part">{part_html}</div>')
+        # ── 계층 트리(top-down) HTML 빌드 ──
+        ACCENT = {"전략기획본부":"#3D4E8C","영업마케팅본부":"#1F7A6B","R&D본부":"#7A4E8C",
+                  "품질인허가본부":"#B07A1E","생산본부":"#2E6B8C"}
+        STATUS_LIGHT = {"none":"#C0BCB4","green":"#2D6A4F","yellow":"#E0A800","red":"#C0392B"}
+        STATUS_LABEL = {"none":"자료 미등록","green":"정상","yellow":"번아웃 초기","red":"집중관리 필요"}
 
-                team_html = ""
-                if team_label:
-                    team_html += f'<div class="teamlabel">{team_label}</div>'
-                team_html += f'<div class="parts">{"".join(part_blocks)}</div>'
-                team_blocks.append(f'<div class="team">{team_html}</div>')
+        def _is_leader(role):
+            return bool(role) and (role in ("본부장","팀장","파트장","센터장","조장") or role.endswith("장"))
 
-            div_blocks.append(
-                f'<div class="div"><div class="divlabel">{div_name}</div>'
-                f'<div class="teams">{"".join(team_blocks)}</div></div>'
-            )
+        def _cnt(node):
+            if isinstance(node, list):
+                return sum((1 if (isinstance(x, dict) and "name" in x) else _cnt(x)) for x in node)
+            if isinstance(node, dict):
+                return sum(_cnt(v) for v in node.values())
+            return 0
 
-        org_html = "".join(div_blocks)
+        def _light_span(nm):
+            s = get_person_status(nm, archive_by_name)[0]
+            col = STATUS_LIGHT.get(s, "#C0BCB4")
+            return s, col, STATUS_LABEL.get(s, "자료 미등록"), \
+                   f'<span class="light" style="background:{col};box-shadow:0 0 5px {col};"></span>'
+
+        def _person_card(p, accent):
+            nm = p.get("name", ""); pos = p.get("pos", ""); role = p.get("role", "")
+            _s, _col, label, light = _light_span(nm)
+            role_txt = role if (role and role != "팀원") else ""
+            meta = pos + ((" · " + role_txt) if role_txt else "")
+            cls = "pcard leader" if _is_leader(role) else "pcard"
+            safe = nm.replace("\\", "").replace("'", "")
+            return (f'<div class="{cls}" style="--accent:{accent};" onclick="showModal(\'{safe}\')" title="{nm} · {label}">'
+                    f'<div class="pname">{nm}</div>'
+                    f'<div class="pmeta"><span class="ppos">{meta}</span>{light}</div></div>')
+
+        def _people_grid(people, accent):
+            if not people:
+                return ""
+            return '<div class="people">' + "".join(_person_card(p, accent) for p in people) + '</div>'
+
+        def _hcard(kind, name, count, accent):
+            return (f'<div class="hcard {kind}" style="--accent:{accent};">'
+                    f'<span class="hkind">{kind}</span><span class="hname">{name}</span>'
+                    f'<span class="hcount">{count}명</span></div>')
+
+        def _part_li(pname, plist, accent):
+            node = _hcard("파트", pname, _cnt(plist), accent) + _people_grid(plist, accent)
+            return f'<li class="leaf"><div class="node">{node}</div></li>'
+
+        def _team_li(tname, tdict, accent):
+            direct = tdict.get("_직속", [])
+            parts = [(k, v) for k, v in tdict.items() if k != "_직속"]
+            node = _hcard("팀", tname, _cnt(tdict), accent) + _people_grid(direct, accent)
+            if parts:
+                kids = "".join(_part_li(k, v, accent) for k, v in parts)
+                return f'<li><div class="node">{node}</div><ul>{kids}</ul></li>'
+            return f'<li class="leaf"><div class="node">{node}</div></li>'
+
+        def _bonbu_li(bname, bdict):
+            accent = ACCENT.get(bname, "#5A5A5A")
+            bd = bdict.get("_직속", {})
+            direct = bd.get("_직속", []) if isinstance(bd, dict) else []
+            teams = [(k, v) for k, v in bdict.items() if k != "_직속"]
+            node = _hcard("본부", bname, _cnt(bdict), accent) + _people_grid(direct, accent)
+            kids = "".join(_team_li(k, v, accent) for k, v in teams)
+            return f'<li class="bonbu"><div class="node">{node}</div><ul>{kids}</ul></li>'
+
+        # 대표 노드
+        _ceo = next(iter((org_data.get("이사회", {}).get("_직속", {}) or {}).get("_직속", [])), None)
+        _ceo_name = _ceo.get("name", "대표") if _ceo else "대표"
+        _ceo_pos = ((_ceo.get("pos", "") + " · " + _ceo.get("role", "")).strip(" ·")) if _ceo else ""
+        _total = _cnt(org_data)
+        _cs, _cc, _clabel, _clight = _light_span(_ceo_name)
+        ceo_card = (f'<div class="hcard ceo" style="--accent:#2B2F36;" onclick="showModal(\'{_ceo_name}\')" '
+                    f'title="{_ceo_name} · {_clabel}"><span class="hkind">대표이사</span>'
+                    f'<span class="hname">{_ceo_name}</span>{_clight}'
+                    f'<span class="hcount">전체 {_total}명</span></div>')
+        _bonbus = [b for b in org_data.keys() if b != "이사회"]
+        org_html = ('<ul class="tree-root"><li><div class="node">' + ceo_card + '</div><ul>'
+                    + "".join(_bonbu_li(b, org_data[b]) for b in _bonbus)
+                    + '</ul></li></ul>')
         pdata_json = json.dumps(person_data, ensure_ascii=False)
 
         org_chart_html = """
@@ -2560,23 +2602,45 @@ with tab_org:
                     background:#F2EDE5; border:1px solid #D4CEC4; border-radius:12px; cursor:grab; }
         #viewport.grabbing { cursor:grabbing; }
         #canvas { transform-origin:0 0; padding:36px; display:inline-block; }
-        .org-root { display:flex; gap:28px; align-items:flex-start; }
-        .div { background:#FFFFFF; border:1.5px solid #C9C1B4; border-radius:14px; padding:16px;
-               min-width:250px; box-shadow:0 3px 14px rgba(0,0,0,0.05); }
-        .divlabel { font-size:15px; font-weight:800; text-align:center; padding:10px;
-                    background:#1A1714; color:#F7F3ED; border-radius:8px; margin-bottom:14px; letter-spacing:1.5px; }
-        .teams { display:flex; flex-direction:column; gap:16px; }
-        .team { border-left:3px solid #B8924A; padding-left:12px; }
-        .teamlabel { font-size:13px; font-weight:700; color:#2B3D5C; margin-bottom:7px; }
-        .parts { display:flex; flex-direction:column; gap:9px; }
-        .partlabel { font-size:11px; color:#8A8278; margin:4px 0 2px; }
-        .cards { display:flex; flex-wrap:wrap; gap:7px; }
-        .pcard { border:1px solid #D4CEC4; border-radius:8px; padding:8px 11px; cursor:pointer;
-                 min-width:92px; transition:all 0.15s; }
-        .pcard:hover { border-color:#B8924A; box-shadow:0 4px 12px rgba(184,146,74,0.22); transform:translateY(-2px); }
-        .pname { font-size:13px; font-weight:600; display:flex; align-items:center; gap:5px; }
-        .ppos { font-size:10px; color:#B0A898; margin-top:2px; }
-        .dot { display:inline-block; width:8px; height:8px; border-radius:50%; }
+        /* 트리 컨테이너 */
+        .tree-root, li > ul { display:flex; justify-content:center; padding-top:26px; position:relative; margin:0; list-style:none; }
+        .tree-root { padding-top:0; }
+        li { list-style:none; display:flex; flex-direction:column; align-items:center; position:relative; padding:26px 10px 0; }
+        .tree-root > li { padding-top:0; }
+        li::before, li::after { content:''; position:absolute; top:0; right:50%; border-top:1.5px solid #C9C1B4; width:50%; height:26px; }
+        li::after { right:auto; left:50%; border-left:1.5px solid #C9C1B4; }
+        li:only-child::before, li:only-child::after { display:none; }
+        li:only-child { padding-top:26px; }
+        .tree-root > li:only-child { padding-top:0; }
+        li:first-child::before, li:last-child::after { border:0; }
+        li:last-child::before { border-right:1.5px solid #C9C1B4; }
+        li > ul::before { content:''; position:absolute; top:0; left:50%; border-left:1.5px solid #C9C1B4; height:26px; }
+        .node { display:flex; flex-direction:column; align-items:center; }
+        /* 구조 헤더 카드 (본부/팀/파트) */
+        .hcard { display:flex; align-items:center; gap:8px; background:#FFFFFF; border:1px solid #E2DDD4;
+                 border-top:3px solid var(--accent); border-radius:10px; padding:8px 14px; white-space:nowrap;
+                 box-shadow:0 2px 6px rgba(0,0,0,0.05); }
+        .hcard .hkind { font-size:9px; letter-spacing:1.5px; text-transform:uppercase; color:var(--accent); font-weight:800; }
+        .hcard .hname { font-size:14px; font-weight:800; color:#1A1714; }
+        .hcard.본부 .hname { color:var(--accent); font-size:15px; }
+        .hcard.ceo { cursor:pointer; }
+        .hcard.ceo .hname { font-size:16px; }
+        .hcard .hcount { font-size:10px; color:#8A8278; background:#F7F3ED; border:1px solid #E2DDD4;
+                         border-radius:999px; padding:1px 9px; margin-left:2px; }
+        .hcard .light { width:9px; height:9px; border-radius:50%; flex:0 0 auto; }
+        /* 인원 카드 그리드 */
+        .people { display:flex; flex-wrap:wrap; justify-content:center; gap:7px; max-width:344px; margin-top:13px; }
+        .pcard { position:relative; background:#FFFFFF; border:1px solid #DDD7CC; border-radius:8px;
+                 padding:7px 10px; min-width:98px; cursor:pointer;
+                 transition:transform .12s, box-shadow .12s, border-color .12s; }
+        .pcard:hover { border-color:var(--accent); box-shadow:0 4px 12px rgba(0,0,0,0.13); transform:translateY(-2px); }
+        .pcard.leader { border-left:4px solid var(--accent); background:#FCFBF8; }
+        .pname { font-size:12.5px; font-weight:600; color:#1A1714; line-height:1.25; }
+        .pcard.leader .pname { font-weight:800; }
+        .pmeta { display:flex; align-items:center; justify-content:space-between; gap:7px; margin-top:3px; }
+        .ppos { font-size:10px; color:#9A938A; }
+        .pcard.leader .ppos { color:var(--accent); font-weight:600; }
+        .light { width:9px; height:9px; border-radius:50%; flex:0 0 auto; }
         #controls { position:absolute; bottom:16px; right:16px; display:flex; gap:7px; z-index:10; }
         #controls button { width:38px; height:38px; border:1px solid #D4CEC4; background:#FFFFFF;
                            border-radius:8px; font-size:18px; cursor:pointer; color:#3D3830;
@@ -2620,10 +2684,14 @@ with tab_org:
         .m-empty .ic { font-size:2.5rem; }
         .m-empty .ttl { font-size:1.1rem; font-weight:700; color:#8B6914; margin:0.8rem 0 0.4rem; }
         .m-empty .ds { font-size:0.85rem; color:#7A7268; line-height:1.6; }
+        .light { cursor:pointer; }
+        .pcard:hover .light { transform:scale(1.45); transition:transform .12s; }
+        .m-cta { background:#FBF3E0; border:1px solid #E4D3A8; border-radius:8px;
+                 padding:0.8rem 1.1rem; font-size:0.8rem; color:#6B5A1E; line-height:1.6; margin-top:0.4rem; }
         </style></head><body>
         <div id="viewport">
-            <div id="canvas"><div class="org-root">__ORG_HTML__</div></div>
-            <div id="zoomlabel">85%</div>
+            <div id="canvas">__ORG_HTML__</div>
+            <div id="zoomlabel">70%</div>
             <div id="controls">
                 <button onclick="zoomBtn(0.1)">+</button>
                 <button onclick="zoomBtn(-0.1)">−</button>
@@ -2635,14 +2703,14 @@ with tab_org:
         </div>
         <script>
         const PDATA = __PDATA__;
-        let scale=0.85, tx=0, ty=0, panning=false, sx=0, sy=0;
+        let scale=0.7, tx=0, ty=0, panning=false, sx=0, sy=0;
         const vp=document.getElementById('viewport');
         const cv=document.getElementById('canvas');
         const zl=document.getElementById('zoomlabel');
         function apply(){ cv.style.transform='translate('+tx+'px,'+ty+'px) scale('+scale+')';
                           zl.textContent=Math.round(scale*100)+'%'; }
         function zoomBtn(d){ scale=Math.min(2.5,Math.max(0.25,scale+d)); apply(); }
-        function resetView(){ scale=0.85; tx=0; ty=0; apply(); }
+        function resetView(){ scale=0.7; tx=0; ty=0; apply(); }
         vp.addEventListener('wheel',function(e){
             if(e.ctrlKey){ e.preventDefault();
                 const r=vp.getBoundingClientRect();
@@ -2672,8 +2740,8 @@ with tab_org:
                   +'<div class="m-name">'+name+'</div></div>'
                   +'<div class="m-body"><div class="m-empty"><div class="ic">📭</div>'
                   +'<div class="ttl">분석 결과가 없습니다</div>'
-                  +'<div class="ds">'+name+' 님의 분석 데이터가 아직 등록되지 않았습니다.<br>'
-                  +'개인 분석 탭에서 분석을 진행해주세요.</div></div></div>';
+                  +'<div class="ds">'+name+' 님의 분석 데이터가 아직 없습니다.<br>'
+                  +'아래 <b>‘인원 상세 · 자료 추가 &amp; 재검사’</b> 패널에서 '+name+' 을(를) 선택해<br>자료를 올리면 첫 분석을 진행할 수 있어요.</div></div></div>';
             } else {
                 const vs=V_STYLE[d.verdict]||["#7A7268","#EDE8E0",d.verdict];
                 let tags=d.tags.map(t=>'<span class="m-tag">'+t+'</span>').join('');
@@ -2709,6 +2777,14 @@ with tab_org:
                   +'<div class="m-sec"><div class="h">리밸런싱 판단 근거</div><div class="t">'+(d.rationale||'')+'</div></div>'
                   +'<div class="m-sec"><div class="h">리더 부여 결론</div><div class="t">'+(d.lead_rec||'')+'</div></div>'
                   +'<div class="m-sec"><div class="h">종합 인사이트</div><div class="t">'+(d.insight||'')+'</div></div>'
+                  +'<div class="m-sec"><div class="h">제출 자료 · 서류 리스트</div><div class="t">'
+                    +((d.materials&&d.materials.length)?d.materials.map(x=>'<span class="m-tag">'+x+'</span>').join(''):'<span style="color:#B0A898;">기록된 제출 자료 없음</span>')
+                    +(d.cov_conf?'<div style="margin-top:7px;font-size:0.78rem;color:#7A7268;">근거 신뢰도 <b>'+d.cov_conf+'</b>'+(d.cov_note?' · '+d.cov_note:'')+'</div>':'')
+                    +'</div></div>'
+                  +'<div class="m-sec"><div class="h">프로필</div><div class="t">'
+                    +(function(){var a=[['전공',d.major],['대학',d.univ],['학력',d.edu],['출신지역',d.region]].filter(x=>x[1]&&x[1]!='자료 미제공'&&x[1]!='-');return a.length?a.map(x=>'<b>'+x[0]+'</b> '+x[1]).join(' &nbsp;·&nbsp; '):'<span style="color:#B0A898;">프로필 자료 미확인</span>';})()
+                    +'</div></div>'
+                  +'<div class="m-cta">📂 <b>자료 추가 · 재검사</b>는 조직도 아래 <b>‘인원 상세 · 자료 추가 &amp; 재검사’</b> 패널에서 <b>'+name+'</b> 을(를) 선택해 진행하세요.</div>'
                   +'</div>';
             }
             document.getElementById('overlay').style.display='flex';
@@ -2720,6 +2796,89 @@ with tab_org:
         """
         org_chart_html = org_chart_html.replace("__ORG_HTML__", org_html).replace("__PDATA__", pdata_json)
         components.html(org_chart_html, height=870, scrolling=False)
+
+        # ── 인원 상세 · 자료 추가 & 재검사 (서버 연동) ──
+        st.markdown("""
+        <div class="section-header" style="margin-top:1.5rem;">
+            <span class="section-num">🔬</span>
+            <span class="section-title">인원 상세 · 자료 추가 &amp; 재검사</span>
+            <div class="section-rule"></div>
+        </div>
+        <p style="font-size:0.78rem;color:#7A7268;margin-bottom:0.9rem;">
+            조직도에서 신호등(카드)을 눌러 확인한 직원을 아래에서 선택하면 <b>제출 서류 리스트·상세 분석 결과지</b>를 보고,
+            <b>자료를 추가해 그 자리에서 재검사</b>할 수 있어요. 재검사 결과는 조직도 신호등에 자동 반영됩니다.
+        </p>
+        """, unsafe_allow_html=True)
+
+        roster = []
+        for _div in org_data.values():
+            for _team in _div.values():
+                for _ppl in _team.values():
+                    for _p in _ppl:
+                        roster.append(_p["name"])
+        roster = sorted(set(roster))
+
+        sel = st.selectbox("직원 선택", ["— 선택 —"] + roster, key="org_detail_sel")
+        if sel and sel != "— 선택 —":
+            s_status, s_color, _ = get_person_status(sel, archive_by_name)
+            s_label = {"none": "자료 미등록", "green": "정상", "yellow": "번아웃 초기", "red": "집중관리 필요"}.get(s_status, "")
+            st.markdown(
+                f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:0.6rem;">'
+                f'<span style="width:11px;height:11px;border-radius:50%;background:{s_color};box-shadow:0 0 5px {s_color};display:inline-block;"></span>'
+                f'<b style="font-size:1.05rem;color:#1A1714;">{sel}</b>'
+                f'<span style="font-size:0.78rem;color:#7A7268;">· {s_label}</span></div>',
+                unsafe_allow_html=True
+            )
+
+            rec = archive_by_name.get(sel)
+            if rec and rec.get("result"):
+                R = rec["result"]
+                mats = R.get("data_coverage", {}).get("materials", [])
+                conf = R.get("data_coverage", {}).get("confidence", "")
+                mat_html = "".join(
+                    f'<span style="display:inline-block;background:#F2EEE6;border:1px solid #E2DDD4;border-radius:5px;padding:2px 9px;margin:2px;font-size:0.74rem;color:#3D3830;">{m}</span>'
+                    for m in mats
+                ) or '<span style="color:#B0A898;font-size:0.78rem;">기록된 제출 자료 없음 (이전 분석은 자료 목록을 저장하지 않았을 수 있어요)</span>'
+                st.markdown(f"""
+                <div style="background:white;border:1px solid #D4CEC4;border-radius:8px;padding:1rem 1.3rem;margin-bottom:0.6rem;">
+                    <div style="font-size:0.7rem;font-weight:700;letter-spacing:1px;color:#B8924A;text-transform:uppercase;margin-bottom:0.5rem;">📄 제출 자료 · 서류 리스트{(' · 근거 신뢰도 ' + conf) if conf else ''}</div>
+                    <div>{mat_html}</div>
+                </div>
+                """, unsafe_allow_html=True)
+                with st.expander("📑 상세 분석 결과지 펼치기", expanded=False):
+                    render_result(R, sel)
+            else:
+                st.info(f"{sel} 님은 아직 분석 데이터가 없어요. 아래에서 자료를 올려 첫 분석을 진행할 수 있습니다.")
+
+            with st.expander("➕ 자료 추가 후 재검사 (이 자리에서 바로 실행)",
+                             expanded=not (rec and rec.get("result"))):
+                add_files = st.file_uploader(
+                    "자료 업로드 (이력서·기안서·MBTI·인적성·SNS 등, 여러 개 가능)",
+                    type=["pdf", "docx", "jpg", "jpeg", "png", "webp", "txt", "md"],
+                    accept_multiple_files=True, key=f"reanalyze_up_{sel}"
+                )
+                st.caption("※ 업로드한 자료로 새로 분석하며, 기존 결과는 최신 결과로 갱신됩니다.")
+                if st.button("🔬 재검사 실행", use_container_width=True, key=f"reanalyze_btn_{sel}"):
+                    if not add_files:
+                        st.error("⚠️ 분석할 자료를 1개 이상 업로드해주세요.")
+                    else:
+                        with st.spinner(f"{sel} 재검사 중 — 업로드한 자료를 종합 검토하고 있습니다..."):
+                            try:
+                                fd = {uf.name: read_file_content(uf) for uf in add_files}
+                                fd["회사 인재상"] = company_standard
+                                fd["회사 5대 핵심문화 축"] = core_culture
+                                fd["회사 향후 방향성"] = company_direction
+                                Rnew = analyze_candidate(api_key, fd, sel, company_standard)
+                                save_to_archive({
+                                    "saved_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                    "candidate_name": sel,
+                                    "dept": rec.get("dept", "") if rec else "",
+                                    "result": Rnew,
+                                })
+                                st.success(f"✅ {sel} 재검사 완료! 조직도 신호등과 결과지가 갱신됩니다.")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"재검사 오류: {str(e)[:160]}")
 
 
 # ── Footer ──
