@@ -3182,11 +3182,21 @@ with tab_results:
         st.markdown("\n".join(_blines) if _blines else "데이터 없음")
 
         st.markdown('<div class="hr"></div>', unsafe_allow_html=True)
-        st.markdown('<div style="font-size:0.72rem;font-weight:700;letter-spacing:1px;color:#B8924A;text-transform:uppercase;margin:0.6rem 0;">개별 상세 결과</div>', unsafe_allow_html=True)
+        st.markdown('<div style="font-size:0.72rem;font-weight:700;letter-spacing:1px;color:#B8924A;text-transform:uppercase;margin:0.6rem 0;">개별 상세 결과 <span style="font-weight:400;text-transform:none;color:#B0A898;">· 항목을 누르면 펼쳐지고, 펼쳐진 항목 맨 아래 ‘접기’로 닫을 수 있어요</span></div>', unsafe_allow_html=True)
         for d in filt:
             ovs = d["ov"] if d["ov"] >= 0 else "-"
-            with st.expander(f"{d['name']} · {d['dept']} · 종합 {ovs}"):
+            _kopen = f"res_open_{d['name']}"
+            _isopen = st.session_state.get(_kopen, False)
+            _arrow = "▾" if _isopen else "▸"
+            if st.button(f"{_arrow}  {d['name']} · {d['dept']} · 종합 {ovs}", key=f"res_tgl_{d['name']}", use_container_width=True):
+                st.session_state[_kopen] = not _isopen
+                st.rerun()
+            if _isopen:
                 render_result(d["R"], d["name"])
+                if st.button("▲  접기 (이 항목 닫기)", key=f"res_close_{d['name']}", use_container_width=True):
+                    st.session_state[_kopen] = False
+                    st.rerun()
+                st.markdown('<div style="height:0.5rem;"></div>', unsafe_allow_html=True)
 
         st.markdown('<div style="height:0.6rem;"></div>', unsafe_allow_html=True)
         st.download_button(
