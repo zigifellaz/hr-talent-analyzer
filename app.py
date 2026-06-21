@@ -1133,9 +1133,16 @@ def load_archive() -> list:
     return []
 
 def save_to_archive(record: dict):
-    """Supabase → 로컬 파일 순으로 저장 (같은 이름은 최신 1건만 유지 = 재분석 시 자동 갱신)"""
+    """Supabase → 로컬 파일 순으로 저장 (같은 이름은 최신 1건만 유지 = 재분석 시 자동 갱신).
+    저장 실패 시 사유를 st.session_state['_sb_save_err']에 기록해 화면에 노출한다."""
     import requests as req
     from urllib.parse import quote
+    def _mark(ok, msg=""):
+        try:
+            st.session_state["_sb_save_ok"] = ok
+            st.session_state["_sb_save_err"] = msg
+        except Exception:
+            pass
     url, key = _get_supabase()
     if url and key:
         nm = (record.get("candidate_name", "") or "").strip()
@@ -1145,6 +1152,7 @@ def save_to_archive(record: dict):
             "dept":           record.get("dept", ""),
             "result_json":    json.dumps(record.get("result", {}), ensure_ascii=False)
         }
+        last_err = ""
         for _attempt in range(2):  # 1회 재시도
             try:
                 r = req.post(
@@ -1168,9 +1176,15 @@ def save_to_archive(record: dict):
                             req.delete(del_url, headers=_sb_headers(key), timeout=10)
                         except Exception:
                             pass  # 이전 기록 삭제 실패해도 최신은 정렬상 우선 표시됨
+                    _mark(True, "")
                     return  # Supabase 저장 성공
-            except Exception:
-                pass
+                else:
+                    last_err = f"HTTP {r.status_code} — {str(r.text)[:200]}"
+            except Exception as e:
+                last_err = f"연결 오류 — {str(e)[:200]}"
+        _mark(False, last_err)  # Supabase 저장 실패 (로컬로 폴백되지만 재배포 시 사라짐)
+    else:
+        _mark(False, "Supabase 미설정")
 
     # 로컬 폴백 (같은 이름 이전 기록 제거 후 최신 추가)
     archive = load_archive()
@@ -2514,6 +2528,13 @@ with tab_bulk:
                     f'<span>❌ 실패 <b style="color:#B0392B;">{len(_fail)}</b>명</span>'
                     f'<span style="color:#7A7268;">(성공한 인원만 아카이브·분석 결과 탭에 저장됩니다)</span></div>',
                     unsafe_allow_html=True)
+                if st.session_state.get("_sb_save_ok") is False:
+                    st.markdown(
+                        f'<div style="background:#FBEAEA;border:1px solid #E4B4B4;border-radius:8px;padding:0.7rem 1rem;margin-bottom:0.6rem;font-size:0.8rem;color:#8B2635;">'
+                        f'⚠️ <b>영구 저장(Supabase) 실패</b> — 분석은 됐지만 DB에 저장되지 않았습니다(임시 저장 상태 → 재배포 시 사라짐).<br>'
+                        f'<span style="font-size:0.74rem;">사유: {st.session_state.get("_sb_save_err","")}</span><br>'
+                        f'<span style="font-size:0.74rem;color:#A55;">대개 RLS(행 보안)에 INSERT 권한이 없거나 컬럼 제약 때문이에요. Supabase에서 talent_archive 테이블의 RLS를 끄거나 INSERT 정책을 추가하세요.</span></div>',
+                        unsafe_allow_html=True)
                 if _fail:
                     with st.expander(f"❌ 실패 {len(_fail)}명 · 사유 보기 (재분석 필요)", expanded=True):
                         for b in _fail:
@@ -3031,6 +3052,13 @@ with tab_bulk:
                 f'<span>❌ 실패 <b style="color:#B0392B;">{len(_afail)}</b>명</span>'
                 f'<span style="color:#7A7268;">(성공한 인원만 아카이브·분석 결과 탭에 저장됩니다)</span></div>',
                 unsafe_allow_html=True)
+            if st.session_state.get("_sb_save_ok") is False:
+                st.markdown(
+                    f'<div style="background:#FBEAEA;border:1px solid #E4B4B4;border-radius:8px;padding:0.7rem 1rem;margin-bottom:0.6rem;font-size:0.8rem;color:#8B2635;">'
+                    f'⚠️ <b>영구 저장(Supabase) 실패</b> — 분석은 됐지만 DB에 저장되지 않았습니다(임시 저장 상태 → 재배포 시 사라짐).<br>'
+                    f'<span style="font-size:0.74rem;">사유: {st.session_state.get("_sb_save_err","")}</span><br>'
+                    f'<span style="font-size:0.74rem;color:#A55;">대개 RLS(행 보안)에 INSERT 권한이 없거나 컬럼 제약 때문이에요. Supabase에서 talent_archive 테이블의 RLS를 끄거나 INSERT 정책을 추가하세요.</span></div>',
+                    unsafe_allow_html=True)
             if _afail:
                 with st.expander(f"❌ 실패 {len(_afail)}명 · 사유 보기 (재분석 필요)", expanded=True):
                     for b in _afail:
