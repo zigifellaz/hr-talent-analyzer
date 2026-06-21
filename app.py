@@ -1059,6 +1059,7 @@ def compute_overall_score(R: dict):
 # ─── 아카이브 함수 (Supabase 영구 저장 + 로컬 폴백) ─────────────────────────
 ARCHIVE_FILE = "archive.json"
 SUPABASE_TABLE = "talent_archive"
+_SB_STATUS = {"ok": None, "msg": "", "count": None}  # 저장 연결 진단용
 
 def _get_supabase():
     """Supabase 연결 정보 반환. 설정 안 됐으면 None."""
@@ -1080,31 +1081,49 @@ def _sb_headers(key):
     }
 
 def load_archive() -> list:
-    """Supabase → 로컬 파일 순으로 시도"""
+    """Supabase → 로컬 파일 순으로 시도. 정렬 컬럼 문제 등으로 조회가 실패해도
+    데이터가 빈 것처럼 보이지 않도록 단계적으로 재시도한다."""
     import requests as req
     url, key = _get_supabase()
-    if url and key:
-        try:
-            r = req.get(
-                f"{url}/rest/v1/{SUPABASE_TABLE}?order=created_at.desc,id.desc&limit=1000",
-                headers=_sb_headers(key), timeout=8
-            )
-            if r.status_code == 200:
-                rows = r.json()
-                return [
-                    {
-                        "id":             row.get("id"),
-                        "saved_at":       row.get("saved_at", ""),
-                        "candidate_name": (row.get("candidate_name", "") or "").strip(),
-                        "dept":           row.get("dept", ""),
-                        "result":         json.loads(row.get("result_json", "{}"))
-                    }
-                    for row in rows
-                ]
-        except Exception:
-            pass
+    if not (url and key):
+        _SB_STATUS["ok"] = False
+        _SB_STATUS["msg"] = "Supabase 미설정 — 임시 저장만 되어 재시작 시 사라질 수 있습니다"
+        _SB_STATUS["count"] = None
+    else:
+        # 정렬 옵션을 단계적으로 시도 (컬럼이 없거나 정렬 오류여도 데이터는 보존)
+        for _q in ("?order=created_at.desc,id.desc&limit=1000",
+                   "?order=created_at.desc&limit=1000",
+                   "?limit=1000"):
+            try:
+                r = req.get(f"{url}/rest/v1/{SUPABASE_TABLE}{_q}",
+                            headers=_sb_headers(key), timeout=8)
+                if r.status_code == 200:
+                    rows = r.json()
+                    out = [
+                        {
+                            "id":             row.get("id"),
+                            "saved_at":       row.get("saved_at", ""),
+                            "candidate_name": (row.get("candidate_name", "") or "").strip(),
+                            "dept":           row.get("dept", ""),
+                            "result":         json.loads(row.get("result_json", "{}"))
+                        }
+                        for row in rows
+                    ]
+                    # 서버 정렬을 신뢰하지 않고 최신(saved_at)이 앞에 오도록 보정
+                    out.sort(key=lambda x: x.get("saved_at", ""), reverse=True)
+                    _SB_STATUS["ok"] = True
+                    _SB_STATUS["msg"] = ""
+                    _SB_STATUS["count"] = len(out)
+                    return out
+                else:
+                    _SB_STATUS["ok"] = False
+                    _SB_STATUS["msg"] = f"Supabase 응답 오류 {r.status_code} — {str(r.text)[:100]}"
+            except Exception as e:
+                _SB_STATUS["ok"] = False
+                _SB_STATUS["msg"] = f"Supabase 연결 실패 — {str(e)[:100]}"
+        _SB_STATUS["count"] = None
 
-    # 로컬 폴백
+    # 로컬 폴백 (임시 저장)
     try:
         if Path(ARCHIVE_FILE).exists():
             with open(ARCHIVE_FILE, "r", encoding="utf-8") as f:
@@ -1743,6 +1762,21 @@ with st.sidebar:
     """, unsafe_allow_html=True)
 
     archive = load_archive()
+
+    # 저장(영구 보관) 연결 상태 표시
+    if _SB_STATUS["ok"] is True:
+        st.markdown(
+            f'<div style="font-size:0.72rem;color:#1E5C3A;background:#E6F2EA;border:1px solid #9CCBB0;'
+            f'border-radius:6px;padding:0.45rem 0.7rem;margin-bottom:0.7rem;">'
+            f'🟢 영구 저장 연결됨 (Supabase) · 기록 {_SB_STATUS["count"]}건</div>',
+            unsafe_allow_html=True)
+    else:
+        st.markdown(
+            f'<div style="font-size:0.72rem;color:#8B2635;background:#FBEAEA;border:1px solid #E4B4B4;'
+            f'border-radius:6px;padding:0.5rem 0.7rem;margin-bottom:0.7rem;">'
+            f'🔴 <b>영구 저장 미연결</b> — 분석 기록이 임시로만 저장되어 <b>앱 재시작·재배포 시 사라집니다.</b><br>'
+            f'<span style="font-size:0.68rem;color:#A55;">{_SB_STATUS["msg"] or "Supabase 설정을 확인하세요"}</span></div>',
+            unsafe_allow_html=True)
 
     if not archive:
         st.markdown('<p style="font-size:0.8rem;color:#B0A898;text-align:center;padding:2rem 0;">저장된 분석 기록이 없습니다.</p>', unsafe_allow_html=True)
